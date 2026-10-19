@@ -1,0 +1,711 @@
+<title>波風サーフ予報</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=Barlow+Condensed:wght@500;600;700&display=swap">
+<style>
+/* Layout: one-column phone app. Sticky header with spot name, "now" summary card,
+   day tabs over a horizontally scrolling 3-hour matrix (row labels stick left), 7-day wave chart,
+   tide-cycle card, fixed bottom nav. Colors encode wind relation to the beach and wave size. */
+:root{
+  --bg:#edf2f5; --panel:#ffffff; --panel2:#f4f7f9; --fg:#132230; --muted:#5e6d79; --line:#d5dee5;
+  --accent:#0b6fb8; --accent-fg:#ffffff; --now:#e0362c;
+  --off:#1a9a4f; --soff:#67b63a; --side:#d9b000; --son:#ee8420; --on:#d8392b; --rel-fg:#ffffff;
+  --w0:#f2f7fb; --w1:#dcecf9; --w2:#b5d8f3; --w3:#7fbbe9; --w4:#3f93d8; --w5:#1c63b5; --w6:#4a2c96;
+  --s0:#f0f3f5; --s1:#dff1dc; --s2:#fdf0b5; --s3:#fdd39b; --s4:#f7a79a; --s5:#d8392b;
+  --c0:#1a9a4f; --c1:#2a8fd6; --c2:#d9a300; --c3:#9aa6b0;
+  --font:"Noto Sans JP",system-ui,-apple-system,"Hiragino Sans","Yu Gothic",sans-serif;
+  --num:"Barlow Condensed","Noto Sans JP",system-ui,sans-serif;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#0f1a23; --panel:#182631; --panel2:#1f2f3b; --fg:#e8eef3; --muted:#93a3b0; --line:#2c3d4a;
+  --accent:#4aa3e8; --accent-fg:#06202f; --now:#ff6a5c;
+  --off:#2fbf66; --soff:#8bcf52; --side:#e6c22c; --son:#f0923a; --on:#ef5b4d; --rel-fg:#06202f;
+  --w0:#1b2a35; --w1:#1f3a50; --w2:#23507a; --w3:#2a6ca8; --w4:#3a8ad6; --w5:#6aa9ec; --w6:#9d7cf2;
+  --s0:#1f2f3b; --s1:#234a30; --s2:#5a4f12; --s3:#6a3f12; --s4:#7a2a22; --s5:#e0493b;
+  --c0:#2fbf66; --c1:#4aa3e8; --c2:#e6c22c; --c3:#6f7f8b;
+  color-scheme:dark;
+}}
+:root[data-theme="dark"]{
+  --bg:#0f1a23; --panel:#182631; --panel2:#1f2f3b; --fg:#e8eef3; --muted:#93a3b0; --line:#2c3d4a;
+  --accent:#4aa3e8; --accent-fg:#06202f; --now:#ff6a5c;
+  --off:#2fbf66; --soff:#8bcf52; --side:#e6c22c; --son:#f0923a; --on:#ef5b4d; --rel-fg:#06202f;
+  --w0:#1b2a35; --w1:#1f3a50; --w2:#23507a; --w3:#2a6ca8; --w4:#3a8ad6; --w5:#6aa9ec; --w6:#9d7cf2;
+  --s0:#1f2f3b; --s1:#234a30; --s2:#5a4f12; --s3:#6a3f12; --s4:#7a2a22; --s5:#e0493b;
+  --c0:#2fbf66; --c1:#4aa3e8; --c2:#e6c22c; --c3:#6f7f8b;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--font);font-size:14px;line-height:1.5;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  padding-block:0 calc(76px + env(safe-area-inset-bottom,0px));-webkit-text-size-adjust:100%}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--panel)}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+button:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.num{font-family:var(--num);font-variant-numeric:tabular-nums}
+
+/* header */
+.hdr{position:sticky;top:env(safe-area-inset-top,0px);z-index:9;background:var(--panel);margin:0 calc(-1 * max(16px,env(safe-area-inset-right,0px))) 0 calc(-1 * max(16px,env(safe-area-inset-left,0px)));
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));border-bottom:1px solid var(--line)}
+.hdr-row{display:flex;align-items:center;gap:8px;min-height:52px}
+.brand{font-family:var(--num);font-weight:700;font-size:18px;letter-spacing:.02em;color:var(--accent);white-space:nowrap}
+.spotbtn{flex:1;min-width:0;display:flex;align-items:center;gap:6px;padding:6px 10px;border-radius:8px;background:var(--panel2);text-align:left}
+.spotbtn .nm{font-weight:700;font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.spotbtn .ar{font-size:11px;color:var(--muted);white-space:nowrap}
+.spotbtn .chev{margin-left:auto;color:var(--muted);font-size:12px}
+.icon-btn{width:40px;height:40px;border-radius:50%;display:grid;place-items:center;font-size:20px;line-height:1}
+.icon-btn.fav{color:var(--muted)}
+.icon-btn.fav.on{color:#f0b429}
+.status{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--muted);padding:4px 0 6px;flex-wrap:wrap}
+.status .dot{width:7px;height:7px;border-radius:50%;background:var(--off)}
+.status.sample .dot{background:var(--side)}
+.status.err .dot{background:var(--on)}
+
+/* sections */
+.view{display:flex;flex-direction:column;gap:12px;padding-top:12px}
+.card{background:var(--panel);border-radius:12px;padding:12px 14px;min-width:0}
+.card h2{margin:0 0 8px;font-size:12px;font-weight:700;color:var(--muted);letter-spacing:.08em;text-transform:uppercase}
+.sub{font-size:11px;color:var(--muted)}
+
+/* now summary */
+.now-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap}
+.now-head .t{font-weight:700}
+.addr{font-size:12px;color:var(--muted);margin-top:2px}
+.now-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+.tile{background:var(--panel2);border-radius:10px;padding:10px 12px;display:flex;align-items:center;gap:10px;min-width:0}
+.tile .lbl{font-size:11px;color:var(--muted)}
+.tile .big{font-family:var(--num);font-weight:700;font-size:30px;line-height:1;font-variant-numeric:tabular-nums}
+.tile .big small{font-size:14px;font-weight:600;margin-left:2px}
+.tile .meta{font-size:12px;color:var(--muted);white-space:nowrap}
+.tile.full{grid-column:1/-1;justify-content:space-between}
+.arw{width:28px;height:28px;flex:none}
+.arw path{fill:currentColor}
+.rel-chip{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700;color:var(--rel-fg);white-space:nowrap}
+.cond{font-family:var(--num);font-weight:700;font-size:34px;line-height:1}
+.c0{color:var(--c0)}.c1{color:var(--c1)}.c2{color:var(--c2)}.c3{color:var(--c3)}
+.rel0{background:var(--off);color:var(--rel-fg)}.rel1{background:var(--soff);color:var(--rel-fg)}.rel2{background:var(--side);color:var(--rel-fg)}.rel3{background:var(--son);color:var(--rel-fg)}.rel4{background:var(--on);color:var(--rel-fg)}
+.fx0{color:var(--off)}.fx1{color:var(--soff)}.fx2{color:var(--side)}.fx3{color:var(--son)}.fx4{color:var(--on)}
+
+/* day tabs */
+.days{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px;margin:0 -14px;padding-left:14px;padding-right:14px}
+.days::-webkit-scrollbar{display:none}
+.day{flex:none;padding:6px 10px;border-radius:8px;background:var(--panel2);font-size:12px;line-height:1.2;text-align:center;min-width:56px;border:1px solid transparent}
+.day .d{font-family:var(--num);font-weight:700;font-size:15px;display:block}
+.day.sel{background:var(--accent);color:var(--accent-fg)}
+.day .sat{color:var(--accent)} .day .sun{color:var(--now)} .day.sel .sat,.day.sel .sun{color:inherit}
+.tools{display:flex;justify-content:space-between;align-items:center;gap:8px;margin:8px 0 6px;flex-wrap:wrap}
+.seg{display:inline-flex;background:var(--panel2);border-radius:8px;padding:2px}
+.seg button{padding:4px 10px;border-radius:6px;font-size:12px}
+.seg button.on{background:var(--panel);box-shadow:0 1px 2px rgba(0,0,0,.15);font-weight:700}
+
+/* matrix */
+.scroll{overflow-x:auto;margin:0 -14px 0 0;padding:0 14px 0 0;-webkit-overflow-scrolling:touch}
+table.mx{border-collapse:separate;border-spacing:0;font-variant-numeric:tabular-nums;min-width:100%}
+.mx th,.mx td{text-align:center;padding:4px 2px;border-bottom:1px solid var(--line);font-weight:500;min-width:50px;white-space:nowrap}
+.mx th.lbl,.mx td.lbl{position:sticky;left:0;background:var(--panel);text-align:left;font-size:11px;color:var(--muted);min-width:58px;padding-left:0;z-index:1;font-weight:700;box-shadow:2px 0 0 var(--panel)}
+.mx thead th{font-family:var(--num);font-size:14px;font-weight:700;color:var(--fg)}
+.mx thead th.lbl{color:var(--muted)}
+.mx th.now,.mx td.now{box-shadow:inset 2px 0 0 var(--now), inset -2px 0 0 var(--now)}
+.mx thead th.now{color:var(--now)}
+.mx .wx{font-size:20px;line-height:1}
+.mx .num{font-size:15px;font-weight:600}
+.mx .u{font-size:10px;color:var(--muted);font-weight:500}
+.mx td .arw{width:22px;height:22px;display:block;margin:0 auto}
+.mx .dirn{font-size:10px;display:block;line-height:1.1;margin-top:1px}
+.mx td.w0{background:var(--w0)}.mx td.w1{background:var(--w1)}.mx td.w2{background:var(--w2)}.mx td.w3{background:var(--w3)}.mx td.w4{background:var(--w4);color:#fff}.mx td.w5{background:var(--w5);color:#fff}.mx td.w6{background:var(--w6);color:#fff}
+.mx td.s0{background:var(--s0)}.mx td.s1{background:var(--s1)}.mx td.s2{background:var(--s2)}.mx td.s3{background:var(--s3)}.mx td.s4{background:var(--s4)}.mx td.s5{background:var(--s5);color:#fff}
+.mx td.r0{background:var(--off);color:var(--rel-fg)}.mx td.r1{background:var(--soff);color:var(--rel-fg)}.mx td.r2{background:var(--side);color:var(--rel-fg)}.mx td.r3{background:var(--son);color:var(--rel-fg)}.mx td.r4{background:var(--on);color:var(--rel-fg)}
+.mx td.cond{font-family:var(--num);font-size:22px;font-weight:700;line-height:1}
+.legend{display:flex;flex-wrap:wrap;gap:6px 12px;font-size:11px;color:var(--muted);margin-top:8px}
+.legend span{display:inline-flex;align-items:center;gap:4px}
+.legend i{width:12px;height:12px;border-radius:3px;display:inline-block}
+
+/* chart */
+.chart{width:100%;height:auto;display:block}
+.chart text{font-family:var(--num);fill:var(--muted);font-size:10px}
+.chart .grid{stroke:var(--line);stroke-width:1}
+.chart .area{fill:var(--accent);opacity:.18}
+.chart .ln{fill:none;stroke:var(--accent);stroke-width:1.6}
+.chart .nowl{stroke:var(--now);stroke-width:1.2;stroke-dasharray:3 2}
+.chart .dsep{stroke:var(--line);stroke-width:1}
+.chart .wl{fill:none;stroke:var(--son);stroke-width:1.2;opacity:.9}
+.chart .dl{fill:var(--fg);font-weight:700;font-size:11px}
+.chart .dl.sun{fill:var(--now)} .chart .dl.sat{fill:var(--accent)}
+
+/* tide */
+.tide{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.tide .nm{font-size:26px;font-weight:700}
+.moon{width:44px;height:44px;flex:none}
+.tide-ev{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:12px;margin-left:auto}
+.tide-ev span{white-space:nowrap}
+.tide-ev .hi b{color:var(--accent)}
+.tide-ev .lo b{color:var(--son)}
+.tide-ev b{font-size:14px}
+.tidec{margin-top:6px}
+
+/* list */
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
+.chip{padding:5px 12px;border-radius:999px;background:var(--panel);font-size:12px;border:1px solid var(--line)}
+.chip.on{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
+.area-h{font-size:12px;color:var(--muted);font-weight:700;margin:6px 0 4px;letter-spacing:.06em}
+.rows{display:flex;flex-direction:column;gap:6px}
+.row{display:grid;grid-template-columns:1fr auto auto auto;align-items:center;gap:6px;background:var(--panel);border-radius:10px;padding:8px 10px;text-align:left;width:100%}
+.row .nm{font-weight:700;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .sb{font-size:11px;color:var(--muted);display:block}
+.row .cell{display:flex;align-items:center;gap:4px;min-width:64px;justify-content:flex-end;position:relative;padding-top:10px}
+.row .cell .cl{position:absolute;top:-4px;left:0;right:0;text-align:center;font-size:9px;color:var(--muted);letter-spacing:.05em}
+.listkey{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:11px;color:var(--muted);margin-bottom:8px}
+.listkey span{display:inline-flex;align-items:center;gap:4px}
+.listkey i{width:10px;height:10px;border-radius:3px;display:inline-block}
+.row .cell .v{font-family:var(--num);font-weight:700;font-size:20px;line-height:1;font-variant-numeric:tabular-nums}
+.row .cell .v small{font-size:11px;font-weight:600}
+.row .cell .arw{width:22px;height:22px}
+.row .cmark{font-family:var(--num);font-weight:700;font-size:24px;line-height:1;width:28px;text-align:center}
+.row .cell .v{color:var(--fg)}
+.row .star{color:var(--muted);font-size:18px;padding:4px}
+.row .star.on{color:#f0b429}
+.empty{padding:24px 12px;text-align:center;color:var(--muted)}
+
+/* bottom nav */
+.nav{position:fixed;left:0;right:0;bottom:0;z-index:9;background:var(--panel);border-top:1px solid var(--line);display:flex;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-bottom:env(safe-area-inset-bottom,0px)}
+.nav button{flex:1;padding:8px 0 6px;font-size:11px;color:var(--muted);display:flex;flex-direction:column;align-items:center;gap:2px}
+.nav button svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.nav button.on{color:var(--accent);font-weight:700}
+
+/* picker */
+.modal{position:fixed;inset:0;z-index:20;background:rgba(5,20,30,.5);display:flex;align-items:flex-end}
+.sheet{background:var(--panel);width:100%;max-height:85%;border-radius:16px 16px 0 0;overflow:auto;padding:12px max(16px,env(safe-area-inset-right,0px)) calc(16px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}
+.sheet-h{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.sheet-h b{font-size:16px}
+.sheet .area-h{margin-top:10px}
+.pick{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:6px}
+.pick button{padding:8px 10px;border-radius:8px;background:var(--panel2);text-align:left;font-size:13px;font-weight:500;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap}
+.pick button .pa{flex-basis:100%;font-size:10px;color:var(--muted);margin-top:2px}
+.pick button.sel .pa{color:inherit;opacity:.85}
+.pick button.sel{background:var(--accent);color:var(--accent-fg)}
+.pick button .fc{font-size:10px;color:var(--muted);white-space:nowrap;flex:none;margin-left:6px}
+.pick button.sel .fc{color:inherit}
+.note{font-size:11px;color:var(--muted);line-height:1.6}
+.note a{color:var(--accent)}
+/* live cameras */
+.cams{display:flex;flex-wrap:wrap;gap:6px}
+.cam{display:inline-block;padding:7px 12px;border-radius:8px;background:var(--accent);color:var(--accent-fg);font-size:13px;font-weight:700;text-decoration:none;max-width:100%;overflow-wrap:anywhere}
+.cam.alt{background:var(--panel2);color:var(--fg);font-weight:500;font-size:12px}
+/* map */
+:root{--land:#e6e1d3;--coast:#8d8572;--sea:#cfd9e2}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){--land:#3a3f3a;--coast:#6c7366;--sea:#22303a} }
+:root[data-theme="dark"]{--land:#3a3f3a;--coast:#6c7366;--sea:#22303a}
+.mapwrap{position:relative;border-radius:10px;overflow:hidden;background:var(--sea);touch-action:manipulation}
+.mapwrap canvas{display:block;width:100%;height:auto}
+.mapwrap .ov{position:absolute;left:8px;top:8px;background:rgba(20,30,40,.75);color:#fff;font-size:12px;padding:3px 8px;border-radius:6px;pointer-events:none;font-weight:700}
+.mapwrap .ov .num{font-size:14px}
+.mapwrap .busy{position:absolute;inset:0;display:grid;place-items:center;background:rgba(20,30,40,.35);color:#fff;font-weight:700;font-size:13px}
+.readout{font-size:12px;color:var(--muted);margin-top:6px;min-height:18px}
+.readout b{color:var(--fg)}
+.timebar{display:flex;align-items:center;gap:8px;margin-top:8px}
+.timebar input[type=range]{flex:1;min-width:0;accent-color:var(--accent)}
+.timebar .tl{font-family:var(--num);font-weight:700;font-size:16px;white-space:nowrap;min-width:92px;text-align:center;font-variant-numeric:tabular-nums}
+.timebar .stepb{width:34px;height:34px;border-radius:8px;background:var(--panel2);font-size:16px;display:grid;place-items:center}
+.cbar{display:flex;margin-top:8px;border-radius:4px;overflow:hidden;height:10px}
+.cbar i{flex:1}
+.clabels{display:flex;font-size:10px;color:var(--muted);font-family:var(--num);margin-top:2px}
+.clabels span{flex:1;text-align:left}
+@media (prefers-reduced-motion:no-preference){ .day,.chip,.row{transition:background .15s} }
+@media (min-width:640px){ .now-grid{grid-template-columns:repeat(4,1fr)} .tile.full{grid-column:span 2} }
+</style>
+
+<div class="hdr">
+  <div class="hdr-row">
+    <span class="brand">波風</span>
+    <button class="spotbtn" id="spotBtn" aria-label="ポイントを選ぶ">
+      <span class="nm" id="hSpot">—</span><span class="ar" id="hArea"></span><span class="chev">▼</span>
+    </button>
+    <button class="icon-btn fav" id="favBtn" aria-label="お気に入り">★</button>
+    <button class="icon-btn" id="refreshBtn" aria-label="更新">⟳</button>
+  </div>
+  <div class="status" id="status"><span class="dot"></span><span id="statusTxt">読み込み中…</span></div>
+</div>
+
+<div id="viewSpot" class="view"></div>
+<div id="viewList" class="view" hidden></div>
+<div id="viewMap" class="view" hidden>
+  <div class="card">
+    <div class="chips" id="regionChips"></div>
+    <div class="seg" id="mapVar" style="display:flex"><button data-v="wh" class="on" style="flex:1">波高</button><button data-v="wp" style="flex:1">波周期</button><button data-v="ws" style="flex:1">風向・風速</button></div>
+    <div class="mapwrap" id="mapWrap" style="margin-top:8px"><canvas id="mapCanvas" aria-label="波風マップ"></canvas><div class="ov" id="mapOv"></div><div class="busy" id="mapBusy" hidden>取得中…</div></div>
+    <div class="timebar"><button class="stepb" id="tPrev" aria-label="前の時刻">‹</button><input type="range" id="tSlider" min="0" max="23" value="0" aria-label="時刻"><button class="stepb" id="tNext" aria-label="次の時刻">›</button><span class="tl" id="tLabel">--</span></div>
+    <div class="cbar" id="cbar"></div><div class="clabels" id="clabels"></div>
+    <div class="readout" id="readout">地図をタップすると、その地点の値を表示します</div>
+    <p class="note" id="mapNote" style="margin:8px 0 0"></p>
+  </div>
+</div>
+
+<div class="nav">
+  <button id="navSpot" class="on"><svg viewBox="0 0 24 24"><path d="M3 15c2-2 4-2 6 0s4 2 6 0 4-2 6 0M3 10c2-2 4-2 6 0s4 2 6 0 4-2 6 0"/></svg>ポイント予報</button>
+  <button id="navMap"><svg viewBox="0 0 24 24"><path d="M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2zM9 4v14M15 6v14"/></svg>地図</button>
+  <button id="navList"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></svg>全ポイント</button>
+</div>
+
+<div id="picker" class="modal" hidden></div>
+
+<script id="coast" type="application/json">__COAST__</script>
+<script id="snapshot" type="application/json">__SNAPSHOT__</script>
+<script>
+(function(){
+'use strict';
+var MV='wave_height,wave_direction,wave_period,swell_wave_height,swell_wave_direction,swell_wave_period,wind_wave_height,wind_wave_direction';
+var WV='wind_speed_10m,wind_direction_10m,wind_gusts_10m,weather_code,temperature_2m';
+/* face = 海岸から沖へ向く方位(度)。オフショア判定に使う */
+var SPOTS=[
+ /* cams: [表示名, URL] の配列。無料で見られる公開カメラのみ */
+ {id:'yoshihama',name:'吉浜（湯河原）',area:'神奈川',addr:'神奈川県足柄下郡湯河原町吉浜 吉浜海岸（真鶴道路 吉浜IC付近）',tide:'OD',lat:35.145,lon:139.110,face:150,cams:[['ウェザーニュース 湯河原','https://weathernews.jp/onebox/livecam/kanto/kanagawa/7CDDE9089A66/']]},
+ {id:'kozu',name:'国府津・酒匂川河口',area:'神奈川',addr:'神奈川県小田原市国府津 酒匂川河口〜国府津海岸',tide:'OD',lat:35.270,lon:139.190,face:160},
+ {id:'ninomiya',name:'二宮',area:'神奈川',addr:'神奈川県中郡二宮町二宮 袖が浦海岸（梅沢海岸）',tide:'OD',lat:35.295,lon:139.255,face:165,cams:[['海岸監視カメラ 二宮','http://118.21.39.196/live/index.html?Language=1&ViewMode=pull']]},
+ {id:'oiso',name:'大磯',area:'神奈川',addr:'神奈川県中郡大磯町大磯 大磯海水浴場〜大磯港西側',tide:'OD',lat:35.304,lon:139.314,face:165,cams:[['海岸監視カメラ 大磯','http://125.206.12.113/live/index.html'],['神奈川なぎさライブ（YouTube）','https://www.youtube.com/@kanagawa_nagisa_livecamera/streams']]},
+ {id:'hanamizu',name:'平塚・花水川河口',area:'神奈川',addr:'神奈川県平塚市虹ケ浜〜唐ケ原 花水川河口（湘南大橋付近）',tide:'D8',lat:35.315,lon:139.335,face:170,cams:[['海岸監視カメラ 平塚','http://125.206.12.112/live/index.html']]},
+ {id:'yanagishima',name:'茅ヶ崎・柳島／西浜',area:'神奈川',addr:'神奈川県茅ヶ崎市柳島 柳島海岸〜西浜（相模川河口東側）',tide:'D8',lat:35.318,lon:139.385,face:175},
+ {id:'chigasaki',name:'茅ヶ崎パーク',area:'神奈川',addr:'神奈川県茅ヶ崎市中海岸4丁目 茅ヶ崎公園（茅ヶ崎海岸）前',tide:'D8',lat:35.322,lon:139.408,face:180,cams:[['茅ヶ崎海岸カメラ','http://221.189.0.181/cgi-bin/guestimage.html'],['サザンビーチ（YouTube）','https://www.youtube.com/watch?v=_UzlXZz9fho'],['茅ヶ崎ビーチ 江ノ島方向（YouTube）','https://www.youtube.com/@cozybeachlive']]},
+ {id:'chisan',name:'茅ヶ崎・チサン／クソ下',area:'神奈川',addr:'神奈川県茅ヶ崎市東海岸南 ヘッドランド東側〜菱沼海岸（汐見台小学校下）',tide:'D8',lat:35.323,lon:139.425,face:180,cams:[['茅ヶ崎海岸カメラ','http://221.189.0.181/cgi-bin/guestimage.html']]},
+ {id:'tsujido',name:'辻堂',area:'神奈川',addr:'神奈川県藤沢市辻堂西海岸3丁目 辻堂海浜公園前',tide:'D8',lat:35.3175,lon:139.4495,face:175,cams:[['なみある？ 辻堂海浜公園前','https://namiaru.com/']]},
+ {id:'hikiji',name:'鵠沼・引地川河口',area:'神奈川',addr:'神奈川県藤沢市鵠沼海岸3丁目 引地川河口（鵠沼海浜公園西側）',tide:'D8',lat:35.312,lon:139.462,face:175,cams:[['神奈川県 藤沢海岸カメラ','http://153.156.235.87/cgi-bin/guestimage.html'],['波通LIVE（YouTube）','https://www.youtube.com/c/%E6%B3%A2%E9%80%9ALIVE/streams']]},
+ {id:'kugenuma',name:'鵠沼（スケパー前）',area:'神奈川',addr:'神奈川県藤沢市鵠沼海岸2丁目 鵠沼海浜公園スケートパーク前',tide:'D8',lat:35.3095,lon:139.4725,face:175,cams:[['神奈川県 藤沢海岸カメラ','http://153.156.235.87/cgi-bin/guestimage.html'],['鵠沼〜水族館前（YouTube）','https://www.youtube.com/watch?v=DZWA9Xicaxg']]},
+ {id:'suizokukan',name:'江ノ島・水族館前',area:'神奈川',addr:'神奈川県藤沢市片瀬海岸2丁目 片瀬西浜（新江ノ島水族館前）',tide:'D8',lat:35.308,lon:139.478,face:180,cams:[['鵠沼〜水族館前（YouTube）','https://www.youtube.com/watch?v=DZWA9Xicaxg'],['片瀬東浜（YouTube）','https://www.youtube.com/watch?v=xPgeZzojY5o']]},
+ {id:'koshigoe',name:'腰越',area:'神奈川',addr:'神奈川県鎌倉市腰越2丁目 腰越海岸（腰越漁港東側）',tide:'D8',lat:35.308,lon:139.490,face:190,cams:[['腰越海岸（YouTube）','https://www.youtube.com/watch?v=ESsZ9iB7tz0']]},
+ {id:'kamako',name:'鎌倉高校前',area:'神奈川',addr:'神奈川県鎌倉市七里ガ浜1丁目 鎌倉高校前駅下',tide:'D8',lat:35.306,lon:139.500,face:195,cams:[['峰ヒルズcam（YouTube）','https://www.youtube.com/@minehillslive/live'],['鎌高前〜江ノ島 H.View（YouTube）','https://www.youtube.com/watch?v=VBb-yNFHi2c']]},
+ {id:'shichiri',name:'七里ヶ浜',area:'神奈川',addr:'神奈川県鎌倉市七里ガ浜東 七里ヶ浜海岸（七里ヶ浜駐車場前）',tide:'D8',lat:35.3045,lon:139.516,face:195,cams:[['峰ヒルズcam（YouTube）','https://www.youtube.com/@minehillslive/live'],['稲村ヶ崎ビュー（YouTube）','https://www.youtube.com/watch?v=T2dB77dObao']]},
+ {id:'inamura',name:'稲村ヶ崎',area:'神奈川',addr:'神奈川県鎌倉市稲村ガ崎1丁目 稲村ヶ崎海岸（稲村ヶ崎公園西側）',tide:'D8',lat:35.305,lon:139.528,face:195,cams:[['稲村ヶ崎ビュー（YouTube）','https://www.youtube.com/watch?v=T2dB77dObao'],['江ノ島ビュー（YouTube）','https://www.youtube.com/watch?v=_ddxDN0eMnA']]},
+ {id:'yuigahama',name:'由比ヶ浜',area:'神奈川',addr:'神奈川県鎌倉市由比ガ浜4丁目 由比ヶ浜海水浴場（滑川河口西側）',tide:'D8',lat:35.310,lon:139.544,face:190,cams:[['神奈川県 鎌倉海岸カメラ','http://153.142.220.112/cgi-bin/guestimage.html'],['なみある？ 由比ヶ浜','https://namiaru.com/']]},
+ {id:'zaimokuza',name:'材木座',area:'神奈川',addr:'神奈川県鎌倉市材木座5丁目 材木座海岸（滑川河口東側）',tide:'D8',lat:35.308,lon:139.555,face:200,cams:[['材木座／由比ヶ浜（YouTube）','https://www.youtube.com/watch?v=Z9Q9akr7QSE']]},
+ {id:'zushi',name:'逗子',area:'神奈川',addr:'神奈川県逗子市新宿〜桜山 逗子海岸（田越川河口）',tide:'Z1',lat:35.293,lon:139.573,face:220,cams:[['海岸監視カメラ 逗子','http://125.206.47.24/live/index.html'],['逗子海岸ワイド（YouTube）','https://www.youtube.com/watch?v=QDfSyvJ-1-g']]},
+ {id:'hayama',name:'葉山・森戸／一色',area:'神奈川',addr:'神奈川県三浦郡葉山町堀内 森戸海岸／一色 一色海岸',tide:'Z1',lat:35.265,lon:139.580,face:250,cams:[['SCAPE 森戸海岸カメラ','http://scapes.aa0.netvolante.jp/CgiStart?page=Single&Resolution=1280x960&Quality=Clarity&Mode=JPEG&RPeriod=3&Size=STD&PresetOperation=Move&SendMethod=1&Language=1&PanTiltMin=0']]},
+ {id:'wadanagahama',name:'三浦・和田長浜',area:'神奈川',addr:'神奈川県三浦市初声町和田 和田長浜海岸',tide:'Z1',lat:35.190,lon:139.600,face:260},
+ {id:'miurakaigan',name:'三浦海岸',area:'神奈川',addr:'神奈川県三浦市南下浦町上宮田 三浦海岸海水浴場',tide:'Z1',lat:35.170,lon:139.660,face:100},
+ {id:'kimigahama',name:'銚子・君ヶ浜',area:'千葉',addr:'千葉県銚子市君ケ浜 君ヶ浜しおさい公園前（犬吠埼北側）',tide:'CS',lat:35.710,lon:140.860,face:60,cams:[['海上保安庁 犬吠埼灯台','https://camera.mics.kaiho.mlit.go.jp/camstream/inubosaki_lt/']]},
+ {id:'iioka',name:'飯岡',area:'千葉',addr:'千葉県旭市下永井〜横根 飯岡海岸（飯岡漁港西側）',tide:'CS',lat:35.702,lon:140.725,face:150},
+ {id:'yasashi',name:'旭・矢指ヶ浦',area:'千葉',addr:'千葉県旭市矢指ケ浦 矢指ヶ浦海水浴場',tide:'CS',lat:35.700,lon:140.690,face:150},
+ {id:'motosuka',name:'本須賀',area:'千葉',addr:'千葉県山武市本須賀 本須賀海水浴場',tide:'CS',lat:35.560,lon:140.520,face:110},
+ {id:'sakuta',name:'作田',area:'千葉',addr:'千葉県山武郡九十九里町作田 作田海水浴場（作田川河口）',tide:'CS',lat:35.530,lon:140.500,face:110},
+ {id:'katakai',name:'片貝',area:'千葉',addr:'千葉県山武郡九十九里町片貝 片貝海水浴場（片貝漁港南側）',tide:'CS',lat:35.470,lon:140.460,face:110,cams:[['サンライズ九十九里（片貝〜豊海）','http://218.224.118.87/viewer/live/ja/live.html']]},
+ {id:'toyomi',name:'豊海',area:'千葉',addr:'千葉県山武郡九十九里町豊海 豊海海水浴場（サンライズ九十九里前）',tide:'CS',lat:35.460,lon:140.455,face:110,cams:[['サンライズ九十九里（片貝〜豊海）','http://218.224.118.87/viewer/live/ja/live.html']]},
+ {id:'shirako',name:'白子・白里',area:'千葉',addr:'千葉県長生郡白子町中里 白子海岸〜大網白里市 白里海水浴場',tide:'ZF',lat:35.440,lon:140.430,face:110},
+ {id:'hitotsumatsu',name:'一松',area:'千葉',addr:'千葉県長生郡長生村一松 一松海岸（一松海水浴場）',tide:'ZF',lat:35.400,lon:140.420,face:100,cams:[['長生村 一松海岸カメラ（YouTube）','https://www.youtube.com/watch?v=47xoP12hJxs']]},
+ {id:'ichinomiya',name:'一宮',area:'千葉',addr:'千葉県長生郡一宮町一宮 一宮海水浴場（九十九里有料道路終点付近）',tide:'ZF',lat:35.375,lon:140.405,face:100,cams:[['一宮CAM 波通（YouTube）','https://www.youtube.com/channel/UCiQUM1JfDY48N6GuytyUMUw'],['一宮サーフィンライブ（YouTube）','https://www.youtube.com/channel/UCorpI8lCIFIuNEZsYAn0Qcg']]},
+ {id:'torami',name:'東浪見',area:'千葉',addr:'千葉県長生郡一宮町東浪見 東浪見海岸（東浪見駅東側）',tide:'ZF',lat:35.365,lon:140.400,face:100,cams:[['一宮CAM 波通（YouTube）','https://www.youtube.com/channel/UCiQUM1JfDY48N6GuytyUMUw']]},
+ {id:'shidashita',name:'志田下（釣ヶ崎）',area:'千葉',addr:'千葉県長生郡一宮町東浪見 釣ヶ崎海岸（志田下・東浪見の鳥居前）',tide:'ZF',lat:35.3585,lon:140.400,face:100,cams:[['一宮CAM 波通（YouTube）','https://www.youtube.com/channel/UCiQUM1JfDY48N6GuytyUMUw'],['一宮サーフィンライブ（YouTube）','https://www.youtube.com/channel/UCorpI8lCIFIuNEZsYAn0Qcg']]},
+ {id:'taito',name:'太東',area:'千葉',addr:'千葉県いすみ市岬町中原 太東海水浴場（太東漁港北側）',tide:'ZF',lat:35.325,lon:140.410,face:100,cams:[['太東 agoproject（YouTube）','https://www.youtube.com/@agoproject/streams']]},
+ {id:'isumi',name:'夷隅川河口',area:'千葉',addr:'千葉県いすみ市岬町和泉〜日在 夷隅川河口（日在浦海岸）',tide:'ZF',lat:35.300,lon:140.400,face:100},
+ {id:'ohara',name:'大原',area:'千葉',addr:'千葉県いすみ市大原 大原海水浴場（大原漁港北側）',tide:'ZF',lat:35.250,lon:140.400,face:110},
+ {id:'onjuku',name:'御宿',area:'千葉',addr:'千葉県夷隅郡御宿町須賀〜浜 御宿中央海水浴場（月の沙漠記念像前）',tide:'ZF',lat:35.183,lon:140.370,face:130,cams:[['御宿中央ライブカメラ（YouTube）','https://www.youtube.com/channel/UCQ75atb4RU3V3haYJ7ZlfbQ/streams']]},
+ {id:'hebara',name:'部原（勝浦）',area:'千葉',addr:'千葉県勝浦市部原 部原海岸（国道128号沿い）',tide:'ZF',lat:35.140,lon:140.300,face:140,cams:[['サンセットタウン 部原','https://www.sunsettown.com/live_cam/'],['部原サウス wowpowcom（YouTube）','https://www.youtube.com/@wowpowcom/streams']]},
+ {id:'kamogawa',name:'鴨川・マルキ／東条',area:'千葉',addr:'千葉県鴨川市東町〜広場 東条海岸（マルキ・鴨川シーワールド西側）',tide:'ZF',lat:35.108,lon:140.113,face:130,cams:[['ウェザーニュース 鴨川（東条海岸）','https://weathernews.jp/onebox/livecam/kanto/chiba/410000133/'],['鴨川シーサイド（YouTube）','https://www.youtube.com/channel/UCo7UbMFk2acnGH76tpgK34Q']]},
+ {id:'maebara',name:'鴨川・前原',area:'千葉',addr:'千葉県鴨川市前原 前原横渚海岸（鴨川漁港東側）',tide:'ZF',lat:35.095,lon:140.100,face:140,cams:[['波のスケッチ 前原（YouTube）','https://www.youtube.com/channel/UCEDn0tLxpVqEvI3NJyE2DRA/streams']]},
+ {id:'shirasuka',name:'和田・白渚',area:'千葉',addr:'千葉県南房総市和田町白渚 白渚海岸（道の駅和田浦WA・O！付近）',tide:'MR',lat:35.030,lon:140.020,face:150,cams:[['南房総いいとこどり 和田（YouTube）','https://www.youtube.com/@%E5%8D%97%E6%88%BF%E7%B7%8F%E3%81%84%E3%81%84%E3%81%A8%E3%81%93%E3%81%A9%E3%82%8A%E3%83%A9%E3%82%A4%E3%83%96%E3%82%AB%E3%83%A1%E3%83%A9']]},
+ {id:'chikura',name:'千倉',area:'千葉',addr:'千葉県南房総市千倉町瀬戸〜川口 千倉海岸（瀬戸浜）',tide:'MR',lat:34.960,lon:139.950,face:130,cams:[['夢みさき 千倉','http://yume.aa0.netvolante.jp/viewer/live/index.html?lang=ja'],['道の駅ちくら（YouTube）','https://www.youtube.com/watch?v=q1Nxn99NwJ4']]},
+ {id:'heisaura',name:'平砂浦',area:'千葉',addr:'千葉県館山市藤原〜犬石 平砂浦海岸（房総フラワーライン沿い）',tide:'MR',lat:34.940,lon:139.800,face:220,cams:[['海上保安庁 野島崎灯台','https://camera.mics.kaiho.mlit.go.jp/camstream/nojimasaki_lt/']]},
+ {id:'tomoe',name:'館山・巴（相浜）',area:'千葉',addr:'千葉県館山市相浜 相浜海岸（巴ポイント・相浜漁港付近）',tide:'MR',lat:34.930,lon:139.780,face:230,cams:[['海上保安庁 野島崎灯台','https://camera.mics.kaiho.mlit.go.jp/camstream/nojimasaki_lt/']]},
+ {id:'oarai',name:'大洗',area:'茨城',addr:'茨城県東茨城郡大洗町大貫町 大洗サンビーチ',tide:'D3',lat:36.3050,lon:140.5900,face:85},
+ {id:'kawaraggo',name:'日立・河原子',area:'茨城',addr:'茨城県日立市河原子町 河原子海水浴場',tide:'D1',lat:36.5600,lon:140.6500,face:90},
+ {id:'shizunami',name:'静波',area:'静岡・伊豆',addr:'静岡県牧之原市静波 静波海水浴場',tide:'OM',lat:34.7050,lon:138.2300,face:140},
+ {id:'omaezaki',name:'御前崎',area:'静岡・伊豆',addr:'静岡県御前崎市御前崎 御前崎ロングビーチ（マリンパーク御前崎南側）',tide:'OM',lat:34.6000,lon:138.2200,face:170},
+ {id:'tatado',name:'多々戸浜',area:'静岡・伊豆',addr:'静岡県下田市吉佐美 多々戸浜海水浴場',tide:'D6',lat:34.6630,lon:138.9300,face:175,cams:[['下田大和館 多々戸浜（静止画）','http://webcam.wni.co.jp/XQT07826/loop.html']]},
+ {id:'shirahama',name:'伊豆白浜',area:'静岡・伊豆',addr:'静岡県下田市白浜 白浜大浜海水浴場',tide:'D6',lat:34.7050,lon:138.9800,face:95,cams:[['なみある？ 白浜','https://namiaru.com/']]},
+ {id:'irago',name:'伊良湖',area:'愛知・三重',addr:'愛知県田原市伊良湖町 ロングビーチ（恋路ヶ浜西側）',tide:'I4',lat:34.5950,lon:137.0500,face:195},
+ {id:'kokufu',name:'伊勢・国府の浜',area:'愛知・三重',addr:'三重県志摩市阿児町国府 国府白浜海岸',tide:'TB',lat:34.3250,lon:136.8550,face:90},
+ {id:'isonoura',name:'磯ノ浦',area:'関西・四国',addr:'和歌山県和歌山市磯の浦 磯の浦海水浴場',tide:'WY',lat:34.2700,lon:135.0950,face:330,cams:[['なみある？ 磯の浦','https://namiaru.com/']]},
+ {id:'ikumi',name:'生見',area:'関西・四国',addr:'高知県安芸郡東洋町生見 生見サーフィンビーチ',tide:'L7',lat:33.5050,lon:134.3000,face:130},
+ {id:'kisaki',name:'宮崎・木崎浜',area:'九州',addr:'宮崎県宮崎市熊野 木崎浜海岸（サンマリンスタジアム東側）',tide:'MG',lat:31.8600,lon:131.4550,face:90},
+ {id:'itoshima',name:'糸島・二見ヶ浦',area:'九州',addr:'福岡県糸島市志摩桜井 二見ヶ浦海岸（夫婦岩前）',tide:'QF',lat:33.6350,lon:130.1500,face:0},
+ {id:'sunabe',name:'砂辺（宮城海岸）',area:'沖縄',addr:'沖縄県中頭郡北谷町宮城2丁目 宮城海岸（砂辺・北谷浄水場前）',tide:'NH',lat:26.345,lon:127.745,face:270,cams:[['北谷・砂辺ライブ（YouTube）','https://www.youtube.com/watch?v=WA4DHpXRPTY'],['オーシャンビュー北谷町砂辺（YouTube）','https://www.youtube.com/channel/UCAtWb74mSuUVyOtN2DfPfKQ'],['アオカワダイビング 砂辺海岸','https://www.cametan.com/map/757.html'],['トランジットカフェ（YouTube）','https://www.youtube.com/@transitcafe4704/streams']]},
+ {id:'zanpa',name:'残波岬（読谷）',area:'沖縄',addr:'沖縄県中頭郡読谷村宇座 残波岬公園西側',tide:'NH',lat:26.430,lon:127.710,face:290},
+ {id:'maeda',name:'真栄田岬',area:'沖縄',addr:'沖縄県国頭郡恩納村真栄田 真栄田岬（青の洞窟）付近',tide:'NH',lat:26.440,lon:127.770,face:300,cams:[['青の洞窟 真栄田岬（YouTube）','https://www.youtube.com/@%E9%9D%92%E3%81%AE%E6%B4%9E%E7%AA%9F-q2i/streams']]},
+ {id:'onna',name:'恩納・ムーンビーチ／かりゆし',area:'沖縄',addr:'沖縄県国頭郡恩納村前兼久 ムーンビーチ〜名嘉真 かりゆしビーチ',tide:'NH',lat:26.490,lon:127.850,face:290,cams:[['かりゆしビーチ（YouTube）','https://www.youtube.com/@Kariyushi.Hotels/streams'],['ブセナビーチ（YouTube）','https://www.youtube.com/watch?v=VWpOgCVKoK4']]},
+ {id:'bise',name:'本部・備瀬',area:'沖縄',addr:'沖縄県国頭郡本部町備瀬 備瀬崎（フクギ並木北側）',tide:'NH',lat:26.700,lon:127.880,face:300,cams:[['ニルヤカナヤBISE（YouTube）','https://www.youtube.com/watch?v=VyT694OcIHM']]},
+ {id:'ogimi',name:'大宜味',area:'沖縄',addr:'沖縄県国頭郡大宜味村津波〜塩屋 塩屋湾周辺',tide:'NH',lat:26.700,lon:128.120,face:290,cams:[['大宜味村 津波公民館カメラ','http://www-camera.vill.ogimi.lg.jp/tuhacc.html']]},
+ {id:'coachan',name:'コーチャン（辺戸）',area:'沖縄',addr:'沖縄県国頭郡国頭村辺戸 辺戸岬東側リーフ',tide:'NK',lat:26.860,lon:128.270,face:60},
+ {id:'ada',name:'安田（国頭東海岸）',area:'沖縄',addr:'沖縄県国頭郡国頭村安田 安田海岸（安田漁港付近）',tide:'NK',lat:26.720,lon:128.330,face:90},
+ {id:'kanna',name:'宜野座・漢那',area:'沖縄',addr:'沖縄県国頭郡宜野座村漢那 漢那ビーチ',tide:'NK',lat:26.480,lon:127.980,face:100},
+ {id:'ikei',name:'伊計島',area:'沖縄',addr:'沖縄県うるま市与那城伊計 伊計島東海岸（伊計ビーチ東側）',tide:'NK',lat:26.390,lon:127.990,face:90,cams:[['海上保安庁 伊計島灯台','https://camera.mics.kaiho.mlit.go.jp/camstream/ikeishima_lt/']]},
+ {id:'hamahiga',name:'浜比嘉・津堅',area:'沖縄',addr:'沖縄県うるま市勝連浜〜勝連津堅 浜比嘉島・津堅島東海岸',tide:'NK',lat:26.300,lon:127.950,face:100,cams:[['津堅島 神谷荘（YouTube）','https://www.youtube.com/@tsukenisland/streams']]},
+ {id:'chinen',name:'知念',area:'沖縄',addr:'沖縄県南城市知念久手堅 知念岬東側（あざまサンサンビーチ付近）',tide:'NK',lat:26.170,lon:127.830,face:120},
+ {id:'hyakuna',name:'百名（南城）',area:'沖縄',addr:'沖縄県南城市玉城百名 百名ビーチ',tide:'NK',lat:26.140,lon:127.800,face:150},
+ {id:'suicide',name:'スーサイド（米須）',area:'沖縄',addr:'沖縄県糸満市米須 米須海岸（スーサイド・ひめゆりの塔南側）',tide:'NH',lat:26.080,lon:127.700,face:180},
+ {id:'nashiro',name:'名城（糸満）',area:'沖縄',addr:'沖縄県糸満市名城 名城ビーチ',tide:'NH',lat:26.090,lon:127.660,face:240},
+ {id:'senaga',name:'瀬長島',area:'沖縄',addr:'沖縄県豊見城市瀬長 瀬長島西側（ウミカジテラス側）',tide:'NH',lat:26.180,lon:127.645,face:270,cams:[['海上保安庁 那覇（第十一管区庁舎）','https://camera.mics.kaiho.mlit.go.jp/camstream/11th_rcgh/']]},
+ {id:'sendai',name:'仙台新港',area:'東北・北海道',addr:'宮城県仙台市宮城野区港 仙台港北側（新港・蒲生海岸）',tide:'SD',lat:38.2700,lon:141.0300,face:95},
+ {id:'atsuma',name:'浜厚真',area:'東北・北海道',addr:'北海道勇払郡厚真町浜厚真 浜厚真海岸（浜厚真野原公園前）',tide:'C8',lat:42.5600,lon:141.8600,face:170}
+];
+var AREA_ORDER=['千葉','沖縄','神奈川','茨城','静岡・伊豆','愛知・三重','関西・四国','九州','東北・北海道'];
+var AREAS=AREA_ORDER.slice();SPOTS.forEach(function(s){if(AREAS.indexOf(s.area)<0)AREAS.push(s.area);});
+var DIR16=['北','北北東','北東','東北東','東','東南東','南東','南南東','南','南南西','南西','西南西','西','西北西','北西','北北西'];
+var WD=['日','月','火','水','木','金','土'];
+var REL=['オフショア','サイドオフ','サイド','サイドオン','オンショア'];
+var CM=['◎','〇','△','×'];
+var CL=['最高','良い','いまいち','不向き'];
+var ARROW='<svg class="arw" viewBox="0 0 24 24" aria-hidden="true" style="transform:rotate(ROTdeg)"><path d="M12 1.5 18.5 11h-4.3V22.5h-4.4V11H5.5z"/></svg>';
+
+function pad(n){return (n<10?'0':'')+n;}
+function dir16(d){return DIR16[Math.round((((d%360)+360)%360)/22.5)%16];}
+function arrow(from,cls){if(from==null)return '<span class="u">--</span>';return ARROW.replace('ROT',Math.round((from+180)%360)).replace('class="arw"','class="arw '+(cls||'')+'"');}
+function wx(c){if(c==null)return '';if(c===0)return '☀️';if(c===1)return '🌤️';if(c===2)return '⛅';if(c===3)return '☁️';if(c<=48)return '🌫️';if(c<=57)return '🌦️';if(c<=67)return '🌧️';if(c<=77)return '🌨️';if(c<=82)return '🌧️';if(c<=86)return '🌨️';return '⛈️';}
+function jstNow(){var d=new Date();return new Date(d.getTime()+(9*60+d.getTimezoneOffset())*60000);}
+function isoOf(d){return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+'T'+pad(d.getHours())+':00';}
+function fmt1(v){return v==null?'--':(Math.round(v*10)/10).toFixed(1);}
+function fmt0(v){return v==null?'--':String(Math.round(v));}
+function esc(s){return String(s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+
+function windRel(face,from){if(from==null)return 2;var off=(face+180)%360;var diff=Math.abs((((from-off)%360)+540)%360-180);
+  return diff<=45?0:diff<=75?1:diff<=105?2:diff<=135?3:4;}
+/* 波が来る向きと海岸の向き(沖向き)の差から、岸に届く割合を推定。真後ろからの波はほぼ届かない */
+function expo(face,from){if(from==null)return 1;var d=Math.abs((((from-face)%360)+540)%360-180);
+  return d<=40?1:d<=90?1-(d-40)/50*0.5:d<=130?0.5-(d-90)/40*0.35:0.12;}
+function effHeight(face,h){if(h.wh==null)return null;
+  var sh=h.sh==null?h.wh:h.sh,sd=h.sd==null?h.wd:h.sd,ww=h.ww==null?0:h.ww,wwd=h.wwd==null?h.wdir:h.wwd;
+  var e=Math.sqrt(Math.pow(sh*expo(face,sd),2)+Math.pow(ww*expo(face,wwd),2));
+  return Math.min(e,h.wh);}
+function wcls(h){if(h==null)return 'w0';return 'w'+(h<0.3?0:h<0.6?1:h<1?2:h<1.5?3:h<2?4:h<3?5:6);}
+function scls(s){if(s==null)return 's0';return 's'+(s<2?0:s<4?1:s<7?2:s<10?3:s<14?4:5);}
+function cond(h){if(h.wh==null||h.ws==null)return 3;var wh=(h.eh==null?h.wh:h.eh),wp=h.wp||0,ws=h.ws,rel=h.rel;
+  if(wh<0.3||wh>3){h.cs=null;return 3;}
+  var a=wh<0.6?1:wh<=1.8?3:wh<=2.5?2:1;            /* 波高 0-3 */
+  var b=wp>=9?2:wp>=6?1:0;                           /* 周期 0-2 */
+  var w;                                             /* 風 0-3: 向きと強さ */
+  if(rel===0)w=ws<=8?3:ws<=12?2:1;
+  else if(rel===1)w=ws<=6?2.5:ws<=10?1.5:0.5;
+  else if(rel===2)w=ws<=3?2:ws<=6?1:0;
+  else if(rel===3)w=ws<=2?1.5:ws<=4?0.5:0;
+  else w=ws<=2?1:ws<=4?0.5:0;
+  var t=a+b+w;var c=t>=7?0:t>=5?1:t>=3?2:3;
+  /* 上限: オンショア系は良くても〇、強ければ△・× */
+  if(rel===4){c=Math.max(c,1);if(ws>4)c=Math.max(c,2);if(ws>7)c=3;}
+  else if(rel===3){c=Math.max(c,1);if(ws>5)c=Math.max(c,2);if(ws>9)c=3;}
+  else if(rel===2&&ws>8)c=Math.max(c,2);
+  if(ws>15)c=Math.max(c,2);
+  h.cs={a:a,b:b,w:w};return c;}
+/* 月齢と潮回り（目安） */
+function moonAge(d){var ref=Date.UTC(2000,0,6,18,14);var syn=29.530588853;var a=((d.getTime()-ref)/86400000)%syn;if(a<0)a+=syn;return a;}
+function tideName(age){var a=Math.floor(age+0.5)%30;
+  if(a<=2||(a>=14&&a<=17)||a>=29)return '大潮';if(a===10||a===25)return '長潮';if(a===11||a===26)return '若潮';if((a>=7&&a<=9)||(a>=22&&a<=24))return '小潮';return '中潮';}
+function moonSvg(age){var ph=age/29.530588853;var r=20;var cx=22,cy=22;var k=Math.cos(ph*2*Math.PI);var rx=Math.abs(k)*r;var light=ph<0.5;
+  var sweep1=light?1:0,sweep2=(k<0)?(light?1:0):(light?0:1);
+  var path='M'+cx+' '+(cy-r)+' A'+r+' '+r+' 0 0 '+sweep1+' '+cx+' '+(cy+r)+' A'+rx+' '+r+' 0 0 '+sweep2+' '+cx+' '+(cy-r)+'Z';
+  return '<svg class="moon" viewBox="0 0 44 44" aria-hidden="true"><circle cx="22" cy="22" r="20" fill="var(--panel2)" stroke="var(--line)"/><path d="'+path+'" fill="#f0c94a"/></svg>';}
+
+/* ---- state ---- */
+var state={view:'spot',spotId:null,dayIdx:0,step:3,favs:[],filter:'all',data:null};
+function ls(k,v){try{if(v===undefined)return localStorage.getItem(k);localStorage.setItem(k,v);}catch(e){return null;}}
+try{var f=JSON.parse(ls('wk_favs')||'[]');if(Array.isArray(f))state.favs=f;}catch(e){}
+state.spotId=ls('wk_spot')||SPOTS[0].id;if(!SPOTS.some(function(s){return s.id===state.spotId;}))state.spotId=SPOTS[0].id;
+state.step=ls('wk_step')==='1'?1:3;
+function spot(){for(var i=0;i<SPOTS.length;i++)if(SPOTS[i].id===state.spotId)return SPOTS[i];return SPOTS[0];}
+
+/* ---- data ---- */
+function normalize(marine,weather,fetchedAt,source){var spots={};
+  marine=Array.isArray(marine)?marine:[marine];weather=Array.isArray(weather)?weather:[weather];
+  SPOTS.forEach(function(sp,i){var m=marine[i],w=weather[i];if(!m||!w||!m.hourly||!w.hourly)return;
+    var wmap={};w.hourly.time.forEach(function(t,j){wmap[t]=j;});var mh=m.hourly,wh=w.hourly;
+    var hours=mh.time.map(function(t,j){var k=wmap[t];var o={iso:t,wh:mh.wave_height[j],wd:mh.wave_direction[j],wp:mh.wave_period[j],
+      sh:mh.swell_wave_height[j],sd:mh.swell_wave_direction[j],sp:mh.swell_wave_period[j],ww:mh.wind_wave_height?mh.wind_wave_height[j]:null,wwd:mh.wind_wave_direction?mh.wind_wave_direction[j]:null,
+      ws:k==null?null:wh.wind_speed_10m[k],wdir:k==null?null:wh.wind_direction_10m[k],gust:k==null?null:wh.wind_gusts_10m[k],
+      wc:k==null?null:wh.weather_code[k],temp:k==null?null:wh.temperature_2m[k]};
+      o.rel=windRel(sp.face,o.wdir);o.eh=effHeight(sp.face,o);o.c=cond(o);return o;});
+    spots[sp.id]={hours:hours};});
+  return {fetchedAt:fetchedAt,source:source,spots:spots};}
+
+function loadSnapshot(){try{var el=document.getElementById('snapshot');var j=JSON.parse(el.textContent);if(j&&j.marine)return normalize(j.marine,j.weather,j.fetchedAt,'snapshot');}catch(e){}return null;}
+function loadCache(){try{var j=JSON.parse(ls('wk_cache')||'null');if(j&&j.marine&&j.v===2)return normalize(j.marine,j.weather,j.fetchedAt,'cache');}catch(e){}return null;}
+function fetchLive(){var lat=SPOTS.map(function(s){return s.lat;}).join(','),lon=SPOTS.map(function(s){return s.lon;}).join(',');
+  var mu='https://marine-api.open-meteo.com/v1/marine?latitude='+lat+'&longitude='+lon+'&hourly='+MV+'&timezone=Asia%2FTokyo&forecast_days=7';
+  var wu='https://api.open-meteo.com/v1/forecast?latitude='+lat+'&longitude='+lon+'&hourly='+WV+'&wind_speed_unit=ms&timezone=Asia%2FTokyo&forecast_days=7';
+  function getJson(u){var ac=typeof AbortController!=='undefined'?new AbortController():null;var tm=setTimeout(function(){if(ac)ac.abort();},15000);
+    return fetch(u,ac?{signal:ac.signal}:{}).then(function(r){clearTimeout(tm);if(!r.ok)throw new Error('HTTP '+r.status);return r.json();},function(e){clearTimeout(tm);throw e;});}
+  return Promise.all([getJson(mu),getJson(wu)])
+    .then(function(rs){var at=new Date().toISOString();try{ls('wk_cache',JSON.stringify({v:2,fetchedAt:at,marine:rs[0],weather:rs[1]}));}catch(e){}
+      return normalize(rs[0],rs[1],at,'live');});}
+
+function fmtAt(iso){if(!iso)return '';var d=new Date(iso);if(isNaN(d))return iso;var j=new Date(d.getTime()+(9*60+d.getTimezoneOffset())*60000);return (j.getMonth()+1)+'/'+j.getDate()+' '+pad(j.getHours())+':'+pad(j.getMinutes());}
+function setStatus(kind,txt){var el=document.getElementById('status');el.className='status '+kind;document.getElementById('statusTxt').textContent=txt;}
+
+/* ---- derived ---- */
+function hoursOf(){var d=state.data&&state.data.spots[state.spotId];return d?d.hours:[];}
+function nowIdx(hours){var n=isoOf(jstNow());for(var i=0;i<hours.length;i++)if(hours[i].iso>=n)return i;return hours.length-1;}
+function days(hours){var out=[],seen={};hours.forEach(function(h,i){var k=h.iso.slice(0,10);if(!seen[k]){seen[k]=true;out.push({key:k,from:i,to:i});}else out[out.length-1].to=i;});return out;}
+function dayLabel(key,i){var p=key.split('-');var d=new Date(+p[0],+p[1]-1,+p[2]);var w=d.getDay();var n=jstNow();var today=isoOf(n).slice(0,10)===key;
+  return {md:(+p[1])+'/'+(+p[2]),w:WD[w],wcls:w===0?'sun':w===6?'sat':'',tag:today?'今日':i===0?'':''};}
+
+/* ---- render: spot view ---- */
+function renderSpot(){var sp=spot();var hours=hoursOf();var root=document.getElementById('viewSpot');
+  document.getElementById('hSpot').textContent=sp.name;document.getElementById('hArea').textContent=sp.area;
+  var fb=document.getElementById('favBtn');fb.className='icon-btn fav'+(state.favs.indexOf(sp.id)>=0?' on':'');
+  if(!hours.length){root.innerHTML='<div class="card empty">このポイントのデータがありません。更新ボタンで再取得してください。</div>';return;}
+  var ni=nowIdx(hours),h=hours[ni];var dl=days(hours);if(state.dayIdx>=dl.length)state.dayIdx=0;
+  var html='';
+  /* now card */
+  var t=h.iso.slice(5,10).replace('-','/')+' '+h.iso.slice(11,16);
+  html+='<div class="card"><div class="now-head"><span class="t">'+t+' の状況</span><span class="sub">'+wx(h.wc)+' '+fmt0(h.temp)+'℃ ／ 沖向き '+dir16(sp.face)+'</span></div>'+(sp.addr?'<div class="addr">📍 '+sp.addr+'</div>':'')+
+    '<div class="now-grid">'+
+    '<div class="tile"><div><div class="lbl">波高（岸の目安）</div><div class="big num">'+fmt1(h.eh)+'<small>m</small></div><div class="meta">沖合 '+fmt1(h.wh)+'m · 周期 '+fmt0(h.wp)+'s</div></div></div>'+
+    '<div class="tile"><span style="color:var(--accent)">'+arrow(h.wd)+'</span><div><div class="lbl">波向</div><div style="font-weight:700">'+(h.wd==null?'--':dir16(h.wd))+'</div><div class="meta">うねり '+fmt1(h.sh)+'m / '+fmt0(h.sp)+'s</div></div></div>'+
+    '<div class="tile"><span class="fx'+h.rel+'">'+arrow(h.wdir)+'</span><div><div class="lbl">風</div><div class="big num">'+fmt1(h.ws)+'<small>m/s</small></div><div class="meta">'+(h.wdir==null?'--':dir16(h.wdir))+' <span class="rel-chip rel'+h.rel+'">'+REL[h.rel]+'</span></div></div></div>'+
+    '<div class="tile"><span class="cond c'+h.c+'">'+CM[h.c]+'</span><div><div class="lbl">コンディション</div><div style="font-weight:700">'+CL[h.c]+'</div><div class="meta">'+condWhy(h)+'</div></div></div>'+
+    '</div></div>';
+  /* live camera card */
+  html+='<div class="card"><h2>ライブカメラ</h2>';
+  if(sp.cams&&sp.cams.length){html+='<div class="cams">'+sp.cams.map(function(c){return '<a class="cam" href="'+esc(c[1])+'" target="_blank" rel="noopener">▶ '+esc(c[0])+'</a>';}).join('')+'</div><p class="note" style="margin:6px 0 0">外部サイトのカメラです。配信元の都合で停止・移転することがあります。</p>';}
+  else html+='<p class="note" style="margin:0">このポイントの無料カメラは未登録です。周辺のポイントや下のまとめサイトで確認できます。</p>';
+  html+='<div class="cams" style="margin-top:8px"><a class="cam alt" href="https://namiaru.com/" target="_blank" rel="noopener">なみある？</a><a class="cam alt" href="https://www.bcm-surfpatrol.com/livecam/" target="_blank" rel="noopener">BCM ライブカメラ</a><a class="cam alt" href="https://www.surfers-ocean.com/" target="_blank" rel="noopener">Surfers\' Ocean</a></div></div>';
+  /* matrix card */
+  html+='<div class="card"><h2>時系列予報</h2><div class="days">'+dl.map(function(d,i){var L=dayLabel(d.key,i);
+    return '<button class="day'+(i===state.dayIdx?' sel':'')+'" data-day="'+i+'"><span class="d">'+L.md+'</span><span class="'+L.wcls+'">'+(L.tag||L.w)+'</span></button>';}).join('')+'</div>'+
+    '<div class="tools"><span class="sub">矢印は波・風の進む向き</span><span class="seg"><button data-step="3" class="'+(state.step===3?'on':'')+'">3時間</button><button data-step="1" class="'+(state.step===1?'on':'')+'">1時間</button></span></div>'+
+    '<div class="scroll">'+matrix(hours,dl[state.dayIdx],ni)+'</div>'+
+    '<div class="legend"><span><i style="background:var(--off)"></i>オフショア</span><span><i style="background:var(--soff)"></i>サイドオフ</span><span><i style="background:var(--side)"></i>サイド</span><span><i style="background:var(--son)"></i>サイドオン</span><span><i style="background:var(--on)"></i>オンショア</span><span><i style="background:var(--w3)"></i>波高は濃いほど高い</span></div>'+
+    '</div>';
+  /* chart card */
+  html+='<div class="card"><h2>週間 波高・風速</h2>'+chart(hours,ni)+'<div class="legend"><span><i style="background:var(--accent);opacity:.5"></i>波高 (m)</span><span><i style="background:var(--son)"></i>風速 (m/s)</span><span><i style="background:var(--now)"></i>現在</span></div></div>';
+  /* tide card */
+  html+=tideCard(sp,dl[state.dayIdx].key);
+  html+='<p class="note">データ: Open-Meteo（波: Marine API / 風: Forecast API）、潮汐: 気象庁 潮位表。「岸の波」はうねり・風波の向きと海岸の向きから岸に届く高さを推定した目安で、判定にはこの値を使います。「沖合波高」はモデルの沖合値です。オフショア判定も海岸の向きから自動計算しています。</p>';
+  root.innerHTML=html;
+  root.querySelectorAll('.day').forEach(function(b){b.addEventListener('click',function(){state.dayIdx=+b.getAttribute('data-day');renderSpot();});});
+  root.querySelectorAll('[data-step]').forEach(function(b){b.addEventListener('click',function(){state.step=+b.getAttribute('data-step');ls('wk_step',String(state.step));renderSpot();});});
+  var nowCell=root.querySelector('.mx thead th.now');if(nowCell&&state.dayIdx===dayIndexOf(dl,ni)){var sc=root.querySelector('.scroll');sc.scrollLeft=Math.max(0,nowCell.offsetLeft-70);}
+}
+function condWhy(h){var e=h.eh==null?h.wh:h.eh;if(!h.cs)return h.wh==null?'データなし':e<0.3?(h.wh>=0.5?'うねりの向きが合わず岸はフラット':'波が小さすぎる'):'波が大きすぎる';var r=REL[h.rel];var wtxt=h.rel===4?'オンショアで減点':h.rel===3?'サイドオンで減点':h.rel===0?'オフショア':r;
+  return '波'+h.cs.a+'/3 周期'+h.cs.b+'/2 風'+h.cs.w+'/3 · '+wtxt;}
+function dayIndexOf(dl,i){for(var k=0;k<dl.length;k++)if(i>=dl[k].from&&i<=dl[k].to)return k;return 0;}
+
+function matrix(hours,day,ni){var cols=[];for(var i=day.from;i<=day.to;i++){var hh=+hours[i].iso.slice(11,13);if(state.step===1||hh%3===0)cols.push(i);}
+  var nowCol=-1;if(state.step===3){for(var k=cols.length-1;k>=0;k--)if(cols[k]<=ni){nowCol=cols[k];break;}}else nowCol=ni;
+  if(ni<day.from||ni>day.to)nowCol=-1;
+  function row(lbl,fn){return '<tr><td class="lbl">'+lbl+'</td>'+cols.map(function(i){var h=hours[i];var c=fn(h);return '<td class="'+(c.cls||'')+(i===nowCol?' now':'')+'">'+c.html+'</td>';}).join('')+'</tr>';}
+  var s='<table class="mx"><thead><tr><th class="lbl">時刻</th>'+cols.map(function(i){return '<th class="'+(i===nowCol?'now':'')+'">'+(+hours[i].iso.slice(11,13))+'<span class="u">時</span></th>';}).join('')+'</tr></thead><tbody>';
+  s+=row('天気',function(h){return {html:'<span class="wx">'+wx(h.wc)+'</span>'};});
+  s+=row('気温',function(h){return {html:'<span class="num">'+fmt0(h.temp)+'</span><span class="u">℃</span>'};});
+  s+=row('岸の波',function(h){return {cls:wcls(h.eh),html:'<span class="num">'+fmt1(h.eh)+'</span><span class="u">m</span>'};});
+  s+=row('沖合波高',function(h){return {cls:wcls(h.wh),html:'<span class="num">'+fmt1(h.wh)+'</span><span class="u">m</span>'};});
+  s+=row('波向',function(h){return {html:'<span style="color:var(--accent)">'+arrow(h.wd)+'</span><span class="dirn">'+(h.wd==null?'--':dir16(h.wd))+'</span>'};});
+  s+=row('周期',function(h){return {html:'<span class="num">'+fmt0(h.wp)+'</span><span class="u">s</span>'};});
+  s+=row('うねり',function(h){return {html:'<span class="num">'+fmt1(h.sh)+'</span><span class="u">m</span><span class="dirn">'+(h.sd==null?'--':dir16(h.sd))+' '+fmt0(h.sp)+'s</span>'};});
+  s+=row('風向',function(h){return {cls:'r'+h.rel,html:arrow(h.wdir)+'<span class="dirn">'+(h.wdir==null?'--':dir16(h.wdir))+'</span>'};});
+  s+=row('風速',function(h){return {cls:scls(h.ws),html:'<span class="num">'+fmt1(h.ws)+'</span><span class="u">m/s</span>'};});
+  s+=row('突風',function(h){return {html:'<span class="num">'+fmt1(h.gust)+'</span><span class="u">m/s</span>'};});
+  s+=row('判定',function(h){return {cls:'cond c'+h.c,html:CM[h.c]};});
+  return s+'</tbody></table>';}
+
+function chart(hours,ni){var W=360,H=130,L=26,R=26,T=18,B=16;var pw=W-L-R,ph=H-T-B;var n=hours.length;if(n<2)return '';
+  var maxW=0,maxS=0;hours.forEach(function(h){if(h.wh>maxW)maxW=h.wh;if(h.ws>maxS)maxS=h.ws;});
+  maxW=Math.max(1,Math.ceil(maxW*2)/2);maxS=Math.max(5,Math.ceil(maxS/5)*5);
+  var x=function(i){return L+pw*i/(n-1);},yw=function(v){return T+ph-ph*v/maxW;},ys=function(v){return T+ph-ph*v/maxS;};
+  var s='<svg class="chart" viewBox="0 0 '+W+' '+H+'" role="img" aria-label="7日間の波高と風速">';
+  var ticks=maxW<=2?0.5:1;for(var v=0;v<=maxW+0.001;v+=ticks){s+='<line class="grid" x1="'+L+'" x2="'+(W-R)+'" y1="'+yw(v)+'" y2="'+yw(v)+'"/><text x="'+(L-4)+'" y="'+(yw(v)+3.5)+'" text-anchor="end">'+v+'</text>';}
+  for(var sv=0;sv<=maxS;sv+=maxS/2){s+='<text x="'+(W-R+4)+'" y="'+(ys(sv)+3.5)+'">'+sv+'</text>';}
+  var dl=days(hours);dl.forEach(function(d,i){var xx=x(d.from);if(i>0)s+='<line class="dsep" x1="'+xx+'" x2="'+xx+'" y1="'+T+'" y2="'+(T+ph)+'"/>';var L2=dayLabel(d.key,i);
+    s+='<text class="dl '+L2.wcls+'" x="'+(xx+2)+'" y="'+(T-6)+'">'+L2.md+'('+L2.w+')</text>';});
+  var area='M'+x(0)+' '+yw(0),line='';hours.forEach(function(h,i){var v=h.wh==null?0:h.wh;area+=' L'+x(i).toFixed(1)+' '+yw(v).toFixed(1);line+=(i?' L':'M')+x(i).toFixed(1)+' '+yw(v).toFixed(1);});area+=' L'+x(n-1)+' '+yw(0)+'Z';
+  var wl='';hours.forEach(function(h,i){var v=h.ws==null?0:h.ws;wl+=(i?' L':'M')+x(i).toFixed(1)+' '+ys(v).toFixed(1);});
+  s+='<path class="area" d="'+area+'"/><path class="ln" d="'+line+'"/><path class="wl" d="'+wl+'"/>';
+  s+='<line class="nowl" x1="'+x(ni)+'" x2="'+x(ni)+'" y1="'+T+'" y2="'+(T+ph)+'"/>';
+  return s+'</svg>';}
+
+/* ---- render: list view ---- */
+function renderList(){var root=document.getElementById('viewList');var html='<div class="chips"><button class="chip'+(state.filter==='all'?' on':'')+'" data-f="all">すべて</button><button class="chip'+(state.filter==='fav'?' on':'')+'" data-f="fav">★ お気に入り</button></div>';
+  html+='<div class="listkey"><span><i style="background:var(--accent)"></i>岸の波: 海岸の向きを考慮した波高の目安と波の進む向き</span><span><i style="background:var(--off)"></i>風: 風速と風の吹いていく向き（色はオフ/オン）</span><span>判定: ◎〇△×</span></div>';
+  var any=false;
+  AREAS.forEach(function(a){var list=SPOTS.filter(function(s){return s.area===a&&(state.filter==='all'||state.favs.indexOf(s.id)>=0);});if(!list.length)return;any=true;
+    html+='<div class="area-h">'+a+'</div><div class="rows">'+list.map(function(sp){var d=state.data&&state.data.spots[sp.id];var h=d?d.hours[nowIdx(d.hours)]:null;var fav=state.favs.indexOf(sp.id)>=0;
+      if(!h)return '<div class="row"><div><span class="nm">'+sp.name+'</span><span class="sb">データなし</span></div></div>';
+      return '<button class="row" data-spot="'+sp.id+'"><div style="min-width:0"><span class="nm">'+sp.name+'</span><span class="sb">'+wx(h.wc)+' '+fmt0(h.temp)+'℃ · '+REL[h.rel]+(sp.cams?' · 📷':'')+'</span></div>'+
+        '<div class="cell"><span class="cl">岸の波</span><span style="color:var(--accent)">'+arrow(h.wd)+'</span><span class="v">'+fmt1(h.eh)+'<small>m</small></span></div>'+
+        '<div class="cell"><span class="cl">風</span><span class="fx'+h.rel+'">'+arrow(h.wdir)+'</span><span class="v">'+fmt1(h.ws)+'<small>m/s</small></span></div>'+
+        '<div class="cell"><span class="cl">判定</span><span class="cmark c'+h.c+'">'+CM[h.c]+'</span></div></button>';}).join('')+'</div>';});
+  if(!any)html+='<div class="card empty">お気に入りがありません。ポイント名横の ★ で追加できます。</div>';
+  root.innerHTML=html;
+  root.querySelectorAll('.chip').forEach(function(b){b.addEventListener('click',function(){state.filter=b.getAttribute('data-f');renderList();});});
+  root.querySelectorAll('.row[data-spot]').forEach(function(b){b.addEventListener('click',function(){state.spotId=b.getAttribute('data-spot');ls('wk_spot',state.spotId);state.dayIdx=0;showView('spot');});});}
+
+/* ---- picker ---- */
+function openPicker(){var m=document.getElementById('picker');var html='<div class="sheet"><div class="sheet-h"><b>ポイントを選ぶ</b><button class="icon-btn" id="pickClose" aria-label="閉じる">✕</button></div>';
+  AREAS.forEach(function(a){html+='<div class="area-h">'+a+'</div><div class="pick">'+SPOTS.filter(function(s){return s.area===a;}).map(function(s){
+    return '<button data-spot="'+s.id+'" class="'+(s.id===state.spotId?'sel':'')+'"><span>'+(state.favs.indexOf(s.id)>=0?'★ ':'')+s.name+'</span><span class="fc">'+(s.cams?'📷 ':'')+'沖'+dir16(s.face).slice(0,2)+'</span>'+(s.addr?'<span class="pa">'+s.addr+'</span>':'')+'</button>';}).join('')+'</div>';});
+  m.innerHTML=html+'</div>';m.hidden=false;
+  m.querySelectorAll('[data-spot]').forEach(function(b){b.addEventListener('click',function(){state.spotId=b.getAttribute('data-spot');ls('wk_spot',state.spotId);state.dayIdx=0;m.hidden=true;showView('spot');});});
+  document.getElementById('pickClose').addEventListener('click',function(){m.hidden=true;});
+  m.addEventListener('click',function(e){if(e.target===m)m.hidden=true;});}
+
+
+/* ================= 潮汐（気象庁 潮位表） ================= */
+var TIDE_ST={OD:'小田原',D8:'湘南港',Z1:'油壺',CS:'銚子漁港',ZF:'勝浦',MR:'布良',D3:'大洗',D1:'日立',OM:'御前崎',D6:'下田',I4:'赤羽根',TB:'鳥羽',WY:'和歌山',L7:'甲浦',MG:'宮崎',QF:'博多',NH:'那覇',NK:'中城湾港',SD:'仙台新港',C8:'苫小牧東'};
+var tideData={},tideBusy={},tideFail={};
+function parseTide(txt){var days={};txt.split('\n').forEach(function(ln){if(ln.length<80)return;var h=[];for(var i=0;i<24;i++)h.push(parseInt(ln.substr(i*3,3),10));
+  var d='20'+ln.substr(72,2)+'-'+ln.substr(74,2)+'-'+ln.substr(76,2);
+  function ev(seg){var out=[];for(var k=0;k<4;k++){var t=seg.substr(k*7,4),c=seg.substr(k*7+4,3);if(t.trim()==='9999'||t.trim()==='')continue;var hh=parseInt(t.substr(0,2),10),mm=parseInt(t.substr(2,2),10),cm=parseInt(c,10);if(isNaN(hh)||isNaN(mm)||isNaN(cm))continue;out.push([hh*60+mm,cm]);}return out;}
+  days[d]={h:h,hi:ev(ln.substr(80,28)),lo:ev(ln.substr(108,28))};});return days;}
+function mergeTide(code,days){var t=tideData[code]||(tideData[code]={});Object.keys(days).forEach(function(k){t[k]=days[k];});}
+function loadTideSnapshot(){try{var j=JSON.parse(document.getElementById('snapshot').textContent);if(j&&j.tide)Object.keys(j.tide).forEach(function(c){mergeTide(c,j.tide[c]);});}catch(e){}}
+loadTideSnapshot();
+function ensureTide(code,year){var key=code+'_'+year;if(tideBusy[key]||tideFail[key])return;
+  try{var c=ls('wk_tide_'+key);if(c){mergeTide(code,parseTide(c));tideFail[key]='ok';return;}}catch(e){}
+  if(typeof fetch!=='function'){tideFail[key]=1;return;}
+  tideBusy[key]=true;
+  fetch('https://www.data.jma.go.jp/kaiyou/data/db/tide/suisan/txt/'+year+'/'+code+'.txt').then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.text();})
+    .then(function(txt){mergeTide(code,parseTide(txt));try{ls('wk_tide_'+key,txt);}catch(e){}tideBusy[key]=false;tideFail[key]='ok';if(state.view==='spot')renderSpot();})
+    .catch(function(){tideBusy[key]=false;tideFail[key]=1;if(state.view==='spot')renderSpot();});}
+function tideDay(code,key){var t=tideData[code];return t?t[key]:null;}
+function hm(min){return pad(Math.floor(min/60))+':'+pad(min%60);}
+function tideCard(sp,dayKey){var code=sp.tide;var html='<div class="card"><h2>潮汐</h2>';
+  var p=dayKey.split('-');var noon=new Date(+p[0],+p[1]-1,+p[2],12);var age=moonAge(noon);var tn=tideName(age);
+  html+='<div class="tide">'+moonSvg(age)+'<div><div class="nm">'+tn+'</div><div class="sub">'+(+p[1])+'/'+(+p[2])+' 月齢 '+(Math.round(age*10)/10).toFixed(1)+'</div></div>';
+  var d=code?tideDay(code,dayKey):null;
+  if(!code){html+='</div><p class="note" style="margin:8px 0 0">このポイントの潮汐地点は未設定です。</p></div>';return html;}
+  if(!d){ensureTide(code,p[0]);
+    html+='</div><p class="note" style="margin:8px 0 0">'+(tideBusy[code+'_'+p[0]]?'気象庁 '+TIDE_ST[code]+' の潮位表を取得中…':'潮位表（'+TIDE_ST[code]+' '+p[0]+'年）を取得できませんでした。<a href="https://www.data.jma.go.jp/kaiyou/db/tide/suisan/index.php" target="_blank" rel="noopener">気象庁 潮位表</a> で確認してください。')+'</p></div>';return html;}
+  var next=tideDay(code,nextDayKey(dayKey));var h=d.h.slice();h.push(next?next.h[0]:d.h[23]);
+  html+='<div class="tide-ev">'+d.hi.map(function(e){return '<span class="hi">満潮 <b class="num">'+hm(e[0])+'</b> '+e[1]+'cm</span>';}).join('')+d.lo.map(function(e){return '<span class="lo">干潮 <b class="num">'+hm(e[0])+'</b> '+e[1]+'cm</span>';}).join('')+'</div></div>';
+  html+=tideChart(h,d,dayKey)+'<p class="note" style="margin:6px 0 0">気象庁 潮位表 '+TIDE_ST[code]+'（潮位表基準面からの高さ）。ポイントから離れた地点の値のため、時刻は数十分ずれることがあります。</p></div>';
+  return html;}
+function nextDayKey(k){var p=k.split('-');var d=new Date(+p[0],+p[1]-1,+p[2]+1);return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());}
+function tideChart(h,d,dayKey){var W=360,H=120,L=30,R=10,T=14,B=18,pw=W-L-R,ph=H-T-B;
+  var mn=Math.min.apply(null,h),mx=Math.max.apply(null,h);mn=Math.floor((mn-10)/20)*20;mx=Math.ceil((mx+10)/20)*20;if(mx<=mn)mx=mn+20;
+  var x=function(min){return L+pw*min/1440;},y=function(v){return T+ph-ph*(v-mn)/(mx-mn);};
+  var s='<svg class="chart tidec" viewBox="0 0 '+W+' '+H+'" role="img" aria-label="潮位の推移">';
+  for(var v=mn;v<=mx;v+=(mx-mn)>=120?40:20){s+='<line class="grid" x1="'+L+'" x2="'+(W-R)+'" y1="'+y(v)+'" y2="'+y(v)+'"/><text x="'+(L-4)+'" y="'+(y(v)+3.5)+'" text-anchor="end">'+v+'</text>';}
+  for(var hr=0;hr<=24;hr+=6){s+='<text x="'+x(hr*60)+'" y="'+(H-4)+'" text-anchor="middle">'+hr+'時</text>';}
+  var line='',area='M'+x(0)+' '+y(mn);h.forEach(function(v,i){var X=x(i*60).toFixed(1),Y=y(v).toFixed(1);line+=(i?' L':'M')+X+' '+Y;area+=' L'+X+' '+Y;});area+=' L'+x(1440)+' '+y(mn)+'Z';
+  s+='<path class="area" d="'+area+'"/><path class="ln" d="'+line+'"/>';
+  d.hi.forEach(function(e){s+='<circle cx="'+x(e[0])+'" cy="'+y(e[1])+'" r="3" fill="var(--accent)"/><text x="'+x(e[0])+'" y="'+(y(e[1])-6)+'" text-anchor="middle" class="dl">'+hm(e[0])+'</text>';});
+  d.lo.forEach(function(e){s+='<circle cx="'+x(e[0])+'" cy="'+y(e[1])+'" r="3" fill="var(--son)"/><text x="'+x(e[0])+'" y="'+(y(e[1])+13)+'" text-anchor="middle" class="dl">'+hm(e[0])+'</text>';});
+  var now=jstNow();if(isoOf(now).slice(0,10)===dayKey){var m=now.getHours()*60+now.getMinutes();s+='<line class="nowl" x1="'+x(m)+'" x2="'+x(m)+'" y1="'+T+'" y2="'+(T+ph)+'"/>';}
+  return s+'</svg>';}
+
+/* ================= map view ================= */
+var REGIONS=__REGIONS__;
+var COAST=[];try{COAST=JSON.parse(document.getElementById('coast').textContent)||[];}catch(e){}
+/* 段階カラー: 値以上の最後の段を使う（旧Yahoo風の離散表示） */
+var SCALES={
+  wh:{name:'波高',unit:'m',stops:[[0,'#6d9ff2'],[0.5,'#59c8f5'],[1,'#5ed98f'],[1.5,'#c9e84a'],[2,'#f9e23f'],[2.5,'#f9a826'],[3,'#f45a1e'],[4,'#c62a2a'],[6,'#8e24aa']]},
+  wp:{name:'波周期',unit:'s',stops:[[0,'#6d9ff2'],[4,'#59c8f5'],[6,'#5ed98f'],[8,'#c9e84a'],[10,'#f9e23f'],[12,'#f9a826'],[14,'#f45a1e'],[16,'#8e24aa']]},
+  ws:{name:'風速',unit:'m/s',stops:[[0,'#8db4f4'],[3,'#59c8f5'],[5,'#5ed98f'],[8,'#f9e23f'],[10,'#f9a826'],[15,'#f45a1e'],[20,'#8e24aa']]}
+};
+function scol(sc,v){if(v==null)return null;var c=sc.stops[0][1];for(var i=0;i<sc.stops.length;i++)if(v>=sc.stops[i][0])c=sc.stops[i][1];return c;}
+var mapState={regionId:ls('wk_region')||'kanto',v:'wh',t:-1,data:{},busy:false,tap:null};
+if(!REGIONS.some(function(r){return r.id===mapState.regionId;}))mapState.regionId=REGIONS[0].id;
+function region(){for(var i=0;i<REGIONS.length;i++)if(REGIONS[i].id===mapState.regionId)return REGIONS[i];return REGIONS[0];}
+function gridN(r){return [Math.floor((r.lat[1]-r.lat[0])/r.step+1e-6)+1,Math.floor((r.lon[1]-r.lon[0])/r.step+1e-6)+1];}
+function packRegion(r,marine,weather,fetchedAt,source){var n=gridN(r),nt=0,times=[];marine=Array.isArray(marine)?marine:[marine];weather=Array.isArray(weather)?weather:[weather];
+  for(var q=0;q<marine.length;q++)if(marine[q]&&marine[q].hourly){times=marine[q].hourly.time;break;}
+  nt=times.length;var N=n[0]*n[1];var o={id:r.id,fetchedAt:fetchedAt,source:source,t:times,n:n,wh:[],wd:[],wp:[],ws:[],wdir:[]};
+  function put(arr,src,k,mul){for(var t=0;t<nt;t++){var v=src&&src[k]?src[k][t]:null;arr.push(v==null?-1:Math.round(v*mul));}}
+  for(var c=0;c<N;c++){var m=marine[c]&&marine[c].hourly,w=weather[c]&&weather[c].hourly;
+    put(o.wh,m,'wave_height',10);put(o.wd,m,'wave_direction',1);put(o.wp,m,'wave_period',10);put(o.ws,w,'wind_speed_10m',10);put(o.wdir,w,'wind_direction_10m',1);}
+  return o;}
+function fetchRegion(r){var n=gridN(r),lats=[],lons=[];for(var i=0;i<n[0];i++)for(var j=0;j<n[1];j++){lats.push((r.lat[0]+i*r.step).toFixed(2));lons.push((r.lon[0]+j*r.step).toFixed(2));}
+  var q='latitude='+lats.join(',')+'&longitude='+lons.join(',')+'&timezone=Asia%2FTokyo&forecast_days=3&temporal_resolution=hourly_3';
+  var mu='https://marine-api.open-meteo.com/v1/marine?'+q+'&hourly=wave_height,wave_direction,wave_period';
+  var wu='https://api.open-meteo.com/v1/forecast?'+q+'&hourly=wind_speed_10m,wind_direction_10m&wind_speed_unit=ms';
+  function getJson(u){var ac=typeof AbortController!=='undefined'?new AbortController():null;var tm=setTimeout(function(){if(ac)ac.abort();},30000);
+    return fetch(u,ac?{signal:ac.signal}:{}).then(function(x){clearTimeout(tm);if(!x.ok)throw new Error('HTTP '+x.status);return x.json();},function(e){clearTimeout(tm);throw e;});}
+  return Promise.all([getJson(mu),getJson(wu)]).then(function(rs){var p=packRegion(r,rs[0],rs[1],new Date().toISOString(),'live');try{ls('wk_map_'+r.id,JSON.stringify(p));}catch(e){}return p;});}
+function loadRegionCache(id){try{var j=JSON.parse(ls('wk_map_'+id)||'null');if(j&&j.t&&j.wh){j.source='cache';return j;}}catch(e){}return null;}
+function ensureRegion(force){var r=region();var d=mapState.data[r.id]||loadRegionCache(r.id);
+  if(d)mapState.data[r.id]=d;
+  var fresh=d&&d.source==='live'&&(Date.now()-new Date(d.fetchedAt).getTime()<60*60000);
+  if(fresh&&!force)return Promise.resolve(d);
+  mapState.busy=true;var b=document.getElementById('mapBusy');if(b){b.hidden=false;b.textContent=d?'最新データを取得中…':'取得中…';}
+  return fetchRegion(r).then(function(p){mapState.data[r.id]=p;mapState.busy=false;mapState.err='';if(mapState.regionId===r.id)renderMap();return p;})
+    .catch(function(e){mapState.busy=false;mapState.err=(e&&/429/.test(String(e.message)))?'rate':'net';if(mapState.regionId===r.id)renderMap();return d;});}
+function mapNowIdx(d){if(!d||!d.t.length)return 0;var n=isoOf(jstNow());for(var i=0;i<d.t.length;i++)if(d.t[i]>=n)return i;return d.t.length-1;}
+function tLabel(iso){var p=iso.slice(0,10).split('-');var w=new Date(+p[0],+p[1]-1,+p[2]).getDay();return (+p[1])+'/'+(+p[2])+'('+WD[w]+') '+(+iso.slice(11,13))+'時';}
+
+function renderMap(){var r=region(),d=mapState.data[r.id];
+  document.getElementById('regionChips').innerHTML=REGIONS.map(function(x){return '<button class="chip'+(x.id===r.id?' on':'')+'" data-r="'+x.id+'">'+x.name+'</button>';}).join('');
+  document.querySelectorAll('#regionChips .chip').forEach(function(b){b.addEventListener('click',function(){mapState.regionId=b.getAttribute('data-r');ls('wk_region',mapState.regionId);mapState.tap=null;renderMap();ensureRegion(false);});});
+  document.querySelectorAll('#mapVar button').forEach(function(b){b.className=b.getAttribute('data-v')===mapState.v?'on':'';});
+  var sc=SCALES[mapState.v];document.getElementById('cbar').innerHTML=sc.stops.map(function(s){return '<i style="background:'+s[1]+'"></i>';}).join('');
+  document.getElementById('clabels').innerHTML=sc.stops.map(function(s){return '<span>'+s[0]+'</span>';}).join('')+'<span style="flex:0;text-align:right">'+sc.unit+'</span>';
+  var sl=document.getElementById('tSlider'),busy=document.getElementById('mapBusy');busy.hidden=!mapState.busy;
+  var note=document.getElementById('mapNote');
+  var errTxt=mapState.err==='rate'?'データ提供元のアクセス制限にかかりました。1分ほど待ってから ⟳ で再取得してください。':mapState.err==='net'?'この地域のデータを取得できませんでした。通信環境を確認して ⟳ で再取得してください。':'';
+  if(!d){document.getElementById('tLabel').textContent='--';document.getElementById('mapOv').textContent=r.name;note.textContent=mapState.busy?'':errTxt;drawMap(r,null);return;}
+  if(mapState.t<0||mapState.t>=d.t.length)mapState.t=mapNowIdx(d);
+  sl.max=d.t.length-1;sl.value=mapState.t;document.getElementById('tLabel').textContent=tLabel(d.t[mapState.t]);
+  document.getElementById('mapOv').innerHTML=r.name+' '+sc.name+' <span class="num">'+tLabel(d.t[mapState.t])+'</span>';
+  note.textContent=(d.source==='snapshot'?'サンプルデータ（'+fmtAt(d.fetchedAt)+' 取得）。':d.source==='cache'?'前回取得 '+fmtAt(d.fetchedAt)+' のデータ。':'更新 '+fmtAt(d.fetchedAt)+'。')+(mapState.busy?'':errTxt)+' 矢印は波・風の進む向き。陸地に近い格子は沖合の値です。';
+  drawMap(r,d);readout(r,d);}
+
+function readout(r,d){var el=document.getElementById('readout');var tp=mapState.tap;if(!tp||!d){el.innerHTML='地図をタップすると、その地点の値を表示します';return;}
+  var nt=d.t.length,c=tp.i*d.n[1]+tp.j,k=c*nt+mapState.t;var wh=d.wh[k],wd=d.wd[k],wp=d.wp[k],ws=d.ws[k],wdir=d.wdir[k];
+  var lat=(r.lat[0]+tp.i*r.step).toFixed(1),lon=(r.lon[0]+tp.j*r.step).toFixed(1);
+  el.innerHTML='N'+lat+' E'+lon+'：波高 <b>'+(wh<0?'--':(wh/10).toFixed(1)+'m')+'</b> '+(wd<0?'':dir16(wd)+'から')+' 周期 <b>'+(wp<0?'--':(wp/10).toFixed(0)+'s')+'</b> ／ 風 <b>'+(ws<0?'--':(ws/10).toFixed(1)+'m/s')+'</b> '+(wdir<0?'':dir16(wdir)+'から');}
+
+function drawMap(r,d){var cv=document.getElementById('mapCanvas');var W=cv.clientWidth||Math.min(600,document.body.clientWidth-60);if(W<50)W=340;
+  var n=gridN(r),s=r.step;var lonMin=r.lon[0]-s/2,lonMax=r.lon[0]+(n[1]-1)*s+s/2,latMin=r.lat[0]-s/2,latMax=r.lat[0]+(n[0]-1)*s+s/2;
+  var cos=Math.cos((latMin+latMax)/2*Math.PI/180);var H=Math.round(W*(latMax-latMin)/((lonMax-lonMin)*cos));
+  var dpr=Math.min(3,window.devicePixelRatio||1);cv.width=Math.round(W*dpr);cv.height=Math.round(H*dpr);cv.style.height=H+'px';
+  var ctx=cv.getContext('2d');ctx.setTransform(dpr,0,0,dpr,0,0);
+  var cs=getComputedStyle(document.documentElement);var SEA=cs.getPropertyValue('--sea').trim()||'#cfd9e2',LAND=cs.getPropertyValue('--land').trim()||'#e6e1d3',COASTC=cs.getPropertyValue('--coast').trim()||'#8d8572';
+  function px(lon){return (lon-lonMin)/(lonMax-lonMin)*W;}function py(lat){return (latMax-lat)/(latMax-latMin)*H;}
+  ctx.fillStyle=SEA;ctx.fillRect(0,0,W,H);
+  var sc=SCALES[mapState.v],nt=d?d.t.length:0,t=mapState.t;
+  var cw=px(s)-px(0),ch=py(0)-py(s);
+  if(d){for(var i=0;i<n[0];i++)for(var j=0;j<n[1];j++){var c=i*n[1]+j,k=c*nt+t;var v=mapState.v==='wh'?d.wh[k]:mapState.v==='wp'?d.wp[k]:d.ws[k];if(v<0)continue;
+      var col=scol(sc,v/10);if(!col)continue;ctx.fillStyle=col;var x0=px(r.lon[0]+j*s-s/2),y0=py(r.lat[0]+i*s+s/2);ctx.fillRect(x0,y0,cw+0.6,ch+0.6);}}
+  /* land */
+  ctx.fillStyle=LAND;ctx.strokeStyle=COASTC;ctx.lineWidth=0.8;ctx.lineJoin='round';
+  for(var q=0;q<COAST.length;q++){var ring=COAST[q];var minx=1e9,maxx=-1e9,miny=1e9,maxy=-1e9;for(var p=0;p<ring.length;p+=2){if(ring[p]<minx)minx=ring[p];if(ring[p]>maxx)maxx=ring[p];if(ring[p+1]<miny)miny=ring[p+1];if(ring[p+1]>maxy)maxy=ring[p+1];}
+    if(maxx<lonMin||minx>lonMax||maxy<latMin||miny>latMax)continue;
+    ctx.beginPath();ctx.moveTo(px(ring[0]),py(ring[1]));for(p=2;p<ring.length;p+=2)ctx.lineTo(px(ring[p]),py(ring[p+1]));ctx.closePath();ctx.fill();ctx.stroke();}
+  /* arrows */
+  if(d){var L=Math.max(6,Math.min(cw,ch)*0.62),hw=L*0.28;ctx.lineCap='round';
+    for(i=0;i<n[0];i++)for(j=0;j<n[1];j++){c=i*n[1]+j;k=c*nt+t;var dir=mapState.v==='ws'?d.wdir[k]:d.wd[k];if(dir<0)continue;
+      var cx=px(r.lon[0]+j*s),cy=py(r.lat[0]+i*s);var a=(dir+180)*Math.PI/180;
+      ctx.save();ctx.translate(cx,cy);ctx.rotate(a);
+      ctx.beginPath();ctx.moveTo(0,L/2);ctx.lineTo(0,-L/2);ctx.moveTo(-hw,-L/2+hw);ctx.lineTo(0,-L/2);ctx.lineTo(hw,-L/2+hw);
+      ctx.strokeStyle='rgba(255,255,255,.85)';ctx.lineWidth=2.6;ctx.stroke();ctx.strokeStyle='#111';ctx.lineWidth=1.1;ctx.stroke();ctx.restore();}}
+  /* surf spots */
+  for(q=0;q<SPOTS.length;q++){var sp=SPOTS[q];if(sp.lon<lonMin||sp.lon>lonMax||sp.lat<latMin||sp.lat>latMax)continue;
+    ctx.beginPath();ctx.arc(px(sp.lon),py(sp.lat),3.2,0,Math.PI*2);ctx.fillStyle='#fff';ctx.fill();ctx.beginPath();ctx.arc(px(sp.lon),py(sp.lat),2,0,Math.PI*2);ctx.fillStyle='#d8392b';ctx.fill();}
+  /* tapped cell */
+  if(d&&mapState.tap){ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.strokeRect(px(r.lon[0]+mapState.tap.j*s-s/2),py(r.lat[0]+mapState.tap.i*s+s/2),cw,ch);ctx.strokeStyle='#111';ctx.lineWidth=1;ctx.strokeRect(px(r.lon[0]+mapState.tap.j*s-s/2),py(r.lat[0]+mapState.tap.i*s+s/2),cw,ch);}
+  cv._geo={lonMin:lonMin,lonMax:lonMax,latMin:latMin,latMax:latMax,W:W,H:H};}
+
+document.getElementById('mapCanvas').addEventListener('click',function(e){var cv=e.currentTarget,g=cv._geo,r=region();if(!g)return;var rc=cv.getBoundingClientRect();
+  var lon=g.lonMin+(e.clientX-rc.left)/rc.width*(g.lonMax-g.lonMin),lat=g.latMax-(e.clientY-rc.top)/rc.height*(g.latMax-g.latMin);var n=gridN(r);
+  var j=Math.round((lon-r.lon[0])/r.step),i=Math.round((lat-r.lat[0])/r.step);if(i<0||j<0||i>=n[0]||j>=n[1])return;mapState.tap={i:i,j:j};renderMap();});
+document.querySelectorAll('#mapVar button').forEach(function(b){b.addEventListener('click',function(){mapState.v=b.getAttribute('data-v');renderMap();});});
+document.getElementById('tSlider').addEventListener('input',function(e){mapState.t=+e.target.value;renderMap();});
+document.getElementById('tPrev').addEventListener('click',function(){if(mapState.t>0){mapState.t--;renderMap();}});
+document.getElementById('tNext').addEventListener('click',function(){var d=mapState.data[region().id];if(d&&mapState.t<d.t.length-1){mapState.t++;renderMap();}});
+var rsz;window.addEventListener('resize',function(){clearTimeout(rsz);rsz=setTimeout(function(){if(state.view==='map')renderMap();},150);});
+function loadMapSnapshot(){try{var j=JSON.parse(document.getElementById('snapshot').textContent);if(j&&j.map){Object.keys(j.map).forEach(function(id){var p=j.map[id];p.source='snapshot';p.fetchedAt=j.fetchedAt;mapState.data[id]=p;});}}catch(e){}}
+loadMapSnapshot();
+
+function showView(v){state.view=v;document.getElementById('viewSpot').hidden=v!=='spot';document.getElementById('viewList').hidden=v!=='list';document.getElementById('viewMap').hidden=v!=='map';
+  document.getElementById('navSpot').className=v==='spot'?'on':'';document.getElementById('navList').className=v==='list'?'on':'';document.getElementById('navMap').className=v==='map'?'on':'';
+  if(v==='spot')renderSpot();else if(v==='list')renderList();else{renderMap();ensureRegion(false);}window.scrollTo(0,0);}
+function render(){if(state.view==='spot')renderSpot();else if(state.view==='list')renderList();else renderMap();}
+
+document.getElementById('spotBtn').addEventListener('click',openPicker);
+document.getElementById('navSpot').addEventListener('click',function(){showView('spot');});
+document.getElementById('navList').addEventListener('click',function(){showView('list');});
+document.getElementById('navMap').addEventListener('click',function(){showView('map');});
+document.getElementById('favBtn').addEventListener('click',function(){var i=state.favs.indexOf(state.spotId);if(i>=0)state.favs.splice(i,1);else state.favs.push(state.spotId);ls('wk_favs',JSON.stringify(state.favs));render();});
+document.getElementById('refreshBtn').addEventListener('click',function(){update(true);if(state.view==='map')ensureRegion(true);});
+
+function update(manual){setStatus('','最新データを取得中…');
+  return fetchLive().then(function(d){state.data=d;setStatus('','更新 '+fmtAt(d.fetchedAt)+' · Open-Meteo');render();})
+    .catch(function(err){var d=state.data;
+      if(d&&d.source==='cache')setStatus('err','通信できません。前回取得 '+fmtAt(d.fetchedAt)+' のデータを表示');
+      else if(d&&d.source==='snapshot')setStatus('sample','サンプルデータ（'+fmtAt(d.fetchedAt)+' 取得）を表示中。ネット接続後に更新してください');
+      else if(d)setStatus('err','通信できません。'+fmtAt(d.fetchedAt)+' のデータを表示');
+      else setStatus('err','データを取得できません。通信環境を確認して更新してください');
+      if(manual&&!d)render();});}
+
+/* boot: show cached or embedded data at once, then refresh */
+state.data=loadCache()||loadSnapshot();
+if(state.data){var sel=state.data;var dl0=days(hoursOf());state.dayIdx=dayIndexOf(dl0,nowIdx(hoursOf()));render();}
+else document.getElementById('viewSpot').innerHTML='<div class="card empty">読み込み中…</div>';
+if(location.hash==='#map')showView('map');else if(location.hash==='#list')showView('list');
+update(false);
+})();
+</script>
