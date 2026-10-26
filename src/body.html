@@ -129,6 +129,7 @@ table.mx{border-collapse:separate;border-spacing:0;font-variant-numeric:tabular-
 .chart .nowl{stroke:var(--now);stroke-width:1.2;stroke-dasharray:3 2}
 .chart .dsep{stroke:var(--line);stroke-width:1}
 .chart .wl{fill:none;stroke:var(--son);stroke-width:1.2;opacity:.9}
+.chart .el{fill:none;stroke:var(--off);stroke-width:1.8}
 .chart .dl{fill:var(--fg);font-weight:700;font-size:11px}
 .chart .dl.sun{fill:var(--now)} .chart .dl.sat{fill:var(--accent)}
 
@@ -232,7 +233,7 @@ table.mx{border-collapse:separate;border-spacing:0;font-variant-numeric:tabular-
 <div id="viewMap" class="view" hidden>
   <div class="card">
     <div class="chips" id="regionChips"></div>
-    <div class="seg" id="mapVar" style="display:flex"><button data-v="wh" class="on" style="flex:1">波高</button><button data-v="wp" style="flex:1">波周期</button><button data-v="ws" style="flex:1">風向・風速</button></div>
+    <div class="seg" id="mapVar" style="display:flex"><button data-v="wh" class="on" style="flex:1">沖合波高</button><button data-v="wp" style="flex:1">波周期</button><button data-v="ws" style="flex:1">風向・風速</button></div>
     <div class="mapwrap" id="mapWrap" style="margin-top:8px"><canvas id="mapCanvas" aria-label="波風マップ"></canvas><div class="ov" id="mapOv"></div><div class="busy" id="mapBusy" hidden>取得中…</div></div>
     <div class="timebar"><button class="stepb" id="tPrev" aria-label="前の時刻">‹</button><input type="range" id="tSlider" min="0" max="23" value="0" aria-label="時刻"><button class="stepb" id="tNext" aria-label="次の時刻">›</button><span class="tl" id="tLabel">--</span></div>
     <div class="cbar" id="cbar"></div><div class="clabels" id="clabels"></div>
@@ -363,6 +364,7 @@ function effHeight(face,h){if(h.wh==null)return null;
   var sh=h.sh==null?h.wh:h.sh,sd=h.sd==null?h.wd:h.sd,ww=h.ww==null?0:h.ww,wwd=h.wwd==null?h.wdir:h.wwd;
   var e=Math.sqrt(Math.pow(sh*expo(face,sd),2)+Math.pow(ww*expo(face,wwd),2));
   return Math.min(e,h.wh);}
+function sizeJp(e){if(e==null)return '--';return e<0.2?'フラット':e<0.35?'スネ〜ヒザ':e<0.5?'ヒザ〜モモ':e<0.7?'腰':e<0.9?'腹':e<1.1?'胸':e<1.3?'肩':e<1.6?'頭':e<2.0?'頭オーバー':'ダブル以上';}
 function wcls(h){if(h==null)return 'w0';return 'w'+(h<0.3?0:h<0.6?1:h<1?2:h<1.5?3:h<2?4:h<3?5:6);}
 function scls(s){if(s==null)return 's0';return 's'+(s<2?0:s<4?1:s<7?2:s<10?3:s<14?4:5);}
 function cond(h){if(h.wh==null||h.ws==null)return 3;var wh=(h.eh==null?h.wh:h.eh),wp=h.wp||0,ws=h.ws,rel=h.rel;
@@ -444,7 +446,7 @@ function renderSpot(){var sp=spot();var hours=hoursOf();var root=document.getEle
   var t=h.iso.slice(5,10).replace('-','/')+' '+h.iso.slice(11,16);
   html+='<div class="card"><div class="now-head"><span class="t">'+t+' の状況</span><span class="sub">'+wx(h.wc)+' '+fmt0(h.temp)+'℃ ／ 沖向き '+dir16(sp.face)+'</span></div>'+(sp.addr?'<div class="addr">📍 '+sp.addr+'</div>':'')+
     '<div class="now-grid">'+
-    '<div class="tile"><div><div class="lbl">波高（岸の目安）</div><div class="big num">'+fmt1(h.eh)+'<small>m</small></div><div class="meta">沖合 '+fmt1(h.wh)+'m · 周期 '+fmt0(h.wp)+'s</div></div></div>'+
+    '<div class="tile"><div><div class="lbl">岸の波（目安）</div><div class="big num">'+fmt1(h.eh)+'<small>m</small> <small style="font-family:var(--font);font-weight:700">'+sizeJp(h.eh)+'</small></div><div class="meta">沖合 '+fmt1(h.wh)+'m · 周期 '+fmt0(h.wp)+'s</div></div></div>'+
     '<div class="tile"><span style="color:var(--accent)">'+arrow(h.wd)+'</span><div><div class="lbl">波向</div><div style="font-weight:700">'+(h.wd==null?'--':dir16(h.wd))+'</div><div class="meta">うねり '+fmt1(h.sh)+'m / '+fmt0(h.sp)+'s</div></div></div>'+
     '<div class="tile"><span class="fx'+h.rel+'">'+arrow(h.wdir)+'</span><div><div class="lbl">風</div><div class="big num">'+fmt1(h.ws)+'<small>m/s</small></div><div class="meta">'+(h.wdir==null?'--':dir16(h.wdir))+' <span class="rel-chip rel'+h.rel+'">'+REL[h.rel]+'</span></div></div></div>'+
     '<div class="tile"><span class="cond c'+h.c+'">'+CM[h.c]+'</span><div><div class="lbl">コンディション</div><div style="font-weight:700">'+CL[h.c]+'</div><div class="meta">'+condWhy(h)+'</div></div></div>'+
@@ -462,10 +464,10 @@ function renderSpot(){var sp=spot();var hours=hoursOf();var root=document.getEle
     '<div class="legend"><span><i style="background:var(--off)"></i>オフショア</span><span><i style="background:var(--soff)"></i>サイドオフ</span><span><i style="background:var(--side)"></i>サイド</span><span><i style="background:var(--son)"></i>サイドオン</span><span><i style="background:var(--on)"></i>オンショア</span><span><i style="background:var(--w3)"></i>波高は濃いほど高い</span></div>'+
     '</div>';
   /* chart card */
-  html+='<div class="card"><h2>週間 波高・風速</h2>'+chart(hours,ni)+'<div class="legend"><span><i style="background:var(--accent);opacity:.5"></i>波高 (m)</span><span><i style="background:var(--son)"></i>風速 (m/s)</span><span><i style="background:var(--now)"></i>現在</span></div></div>';
+  html+='<div class="card"><h2>週間 波高・風速</h2>'+chart(hours,ni)+'<div class="legend"><span><i style="background:var(--off)"></i>岸の波 (m)</span><span><i style="background:var(--accent);opacity:.5"></i>沖合波高 (m)</span><span><i style="background:var(--son)"></i>風速 (m/s)</span><span><i style="background:var(--now)"></i>現在</span></div></div>';
   /* tide card */
   html+=tideCard(sp,dl[state.dayIdx].key);
-  html+='<p class="note">データ: Open-Meteo（波: Marine API / 風: Forecast API）、潮汐: 気象庁 潮位表。「岸の波」はうねり・風波の向きと海岸の向きから岸に届く高さを推定した目安で、判定にはこの値を使います。「沖合波高」はモデルの沖合値です。オフショア判定も海岸の向きから自動計算しています。</p>';
+  html+='<p class="note">データ: Open-Meteo（波: Marine API / 風: Forecast API）、潮汐: 気象庁 潮位表。「岸の波」はうねり・風波の向きと海岸の向きから岸に届く有義波高を推定した目安で、判定にはこの値を使います。ヒザ・腰・胸などのサイズ表記はこの値からの目安で、地形や潮位で実際のサイズは変わります。「沖合波高」と地図の値はモデルの沖合値です。オフショア判定も海岸の向きから自動計算しています。</p>';
   root.innerHTML=html;
   root.querySelectorAll('.day').forEach(function(b){b.addEventListener('click',function(){state.dayIdx=+b.getAttribute('data-day');renderSpot();});});
   root.querySelectorAll('[data-step]').forEach(function(b){b.addEventListener('click',function(){state.step=+b.getAttribute('data-step');ls('wk_step',String(state.step));renderSpot();});});
@@ -482,7 +484,7 @@ function matrix(hours,day,ni){var cols=[];for(var i=day.from;i<=day.to;i++){var 
   var s='<table class="mx"><thead><tr><th class="lbl">時刻</th>'+cols.map(function(i){return '<th class="'+(i===nowCol?'now':'')+'">'+(+hours[i].iso.slice(11,13))+'<span class="u">時</span></th>';}).join('')+'</tr></thead><tbody>';
   s+=row('天気',function(h){return {html:'<span class="wx">'+wx(h.wc)+'</span>'};});
   s+=row('気温',function(h){return {html:'<span class="num">'+fmt0(h.temp)+'</span><span class="u">℃</span>'};});
-  s+=row('岸の波',function(h){return {cls:wcls(h.eh),html:'<span class="num">'+fmt1(h.eh)+'</span><span class="u">m</span>'};});
+  s+=row('岸の波',function(h){return {cls:wcls(h.eh),html:'<span class="num">'+fmt1(h.eh)+'</span><span class="u">m</span><span class="dirn">'+sizeJp(h.eh)+'</span>'};});
   s+=row('沖合波高',function(h){return {cls:wcls(h.wh),html:'<span class="num">'+fmt1(h.wh)+'</span><span class="u">m</span>'};});
   s+=row('波向',function(h){return {html:'<span style="color:var(--accent)">'+arrow(h.wd)+'</span><span class="dirn">'+(h.wd==null?'--':dir16(h.wd))+'</span>'};});
   s+=row('周期',function(h){return {html:'<span class="num">'+fmt0(h.wp)+'</span><span class="u">s</span>'};});
@@ -504,7 +506,8 @@ function chart(hours,ni){var W=360,H=130,L=26,R=26,T=18,B=16;var pw=W-L-R,ph=H-T
     s+='<text class="dl '+L2.wcls+'" x="'+(xx+2)+'" y="'+(T-6)+'">'+L2.md+'('+L2.w+')</text>';});
   var area='M'+x(0)+' '+yw(0),line='';hours.forEach(function(h,i){var v=h.wh==null?0:h.wh;area+=' L'+x(i).toFixed(1)+' '+yw(v).toFixed(1);line+=(i?' L':'M')+x(i).toFixed(1)+' '+yw(v).toFixed(1);});area+=' L'+x(n-1)+' '+yw(0)+'Z';
   var wl='';hours.forEach(function(h,i){var v=h.ws==null?0:h.ws;wl+=(i?' L':'M')+x(i).toFixed(1)+' '+ys(v).toFixed(1);});
-  s+='<path class="area" d="'+area+'"/><path class="ln" d="'+line+'"/><path class="wl" d="'+wl+'"/>';
+  var el='';hours.forEach(function(h,i){var v=h.eh==null?0:h.eh;el+=(i?' L':'M')+x(i).toFixed(1)+' '+yw(v).toFixed(1);});
+  s+='<path class="area" d="'+area+'"/><path class="ln" d="'+line+'"/><path class="el" d="'+el+'"/><path class="wl" d="'+wl+'"/>';
   s+='<line class="nowl" x1="'+x(ni)+'" x2="'+x(ni)+'" y1="'+T+'" y2="'+(T+ph)+'"/>';
   return s+'</svg>';}
 
@@ -515,7 +518,7 @@ function renderList(){var root=document.getElementById('viewList');var html='<di
   AREAS.forEach(function(a){var list=SPOTS.filter(function(s){return s.area===a&&(state.filter==='all'||state.favs.indexOf(s.id)>=0);});if(!list.length)return;any=true;
     html+='<div class="area-h">'+a+'</div><div class="rows">'+list.map(function(sp){var d=state.data&&state.data.spots[sp.id];var h=d?d.hours[nowIdx(d.hours)]:null;var fav=state.favs.indexOf(sp.id)>=0;
       if(!h)return '<div class="row"><div><span class="nm">'+sp.name+'</span><span class="sb">データなし</span></div></div>';
-      return '<button class="row" data-spot="'+sp.id+'"><div style="min-width:0"><span class="nm">'+sp.name+'</span><span class="sb">'+wx(h.wc)+' '+fmt0(h.temp)+'℃ · '+REL[h.rel]+(sp.cams?' · 📷':'')+'</span></div>'+
+      return '<button class="row" data-spot="'+sp.id+'"><div style="min-width:0"><span class="nm">'+sp.name+'</span><span class="sb">'+sizeJp(h.eh)+' · '+REL[h.rel]+' · '+wx(h.wc)+fmt0(h.temp)+'℃'+(sp.cams?' · 📷':'')+'</span></div>'+
         '<div class="cell"><span class="cl">岸の波</span><span style="color:var(--accent)">'+arrow(h.wd)+'</span><span class="v">'+fmt1(h.eh)+'<small>m</small></span></div>'+
         '<div class="cell"><span class="cl">風</span><span class="fx'+h.rel+'">'+arrow(h.wdir)+'</span><span class="v">'+fmt1(h.ws)+'<small>m/s</small></span></div>'+
         '<div class="cell"><span class="cl">判定</span><span class="cmark c'+h.c+'">'+CM[h.c]+'</span></div></button>';}).join('')+'</div>';});
@@ -583,7 +586,7 @@ var REGIONS=__REGIONS__;
 var COAST=[];try{COAST=JSON.parse(document.getElementById('coast').textContent)||[];}catch(e){}
 /* 段階カラー: 値以上の最後の段を使う（旧Yahoo風の離散表示） */
 var SCALES={
-  wh:{name:'波高',unit:'m',stops:[[0,'#6d9ff2'],[0.5,'#59c8f5'],[1,'#5ed98f'],[1.5,'#c9e84a'],[2,'#f9e23f'],[2.5,'#f9a826'],[3,'#f45a1e'],[4,'#c62a2a'],[6,'#8e24aa']]},
+  wh:{name:'沖合波高',unit:'m',stops:[[0,'#6d9ff2'],[0.5,'#59c8f5'],[1,'#5ed98f'],[1.5,'#c9e84a'],[2,'#f9e23f'],[2.5,'#f9a826'],[3,'#f45a1e'],[4,'#c62a2a'],[6,'#8e24aa']]},
   wp:{name:'波周期',unit:'s',stops:[[0,'#6d9ff2'],[4,'#59c8f5'],[6,'#5ed98f'],[8,'#c9e84a'],[10,'#f9e23f'],[12,'#f9a826'],[14,'#f45a1e'],[16,'#8e24aa']]},
   ws:{name:'風速',unit:'m/s',stops:[[0,'#8db4f4'],[3,'#59c8f5'],[5,'#5ed98f'],[8,'#f9e23f'],[10,'#f9a826'],[15,'#f45a1e'],[20,'#8e24aa']]}
 };
