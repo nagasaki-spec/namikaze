@@ -151,11 +151,21 @@ table.mx{border-collapse:separate;border-spacing:0;font-variant-numeric:tabular-
 .area-h{font-size:12px;color:var(--muted);font-weight:700;margin:6px 0 4px;letter-spacing:.06em}
 .rows{display:flex;flex-direction:column;gap:6px}
 .row{display:grid;grid-template-columns:1fr auto auto auto;align-items:center;gap:6px;background:var(--panel);border-radius:10px;padding:8px 10px;text-align:left;width:100%}
+.row .cell .v{font-size:18px}
 .row .nm{font-weight:700;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .row .sb{font-size:11px;color:var(--muted);display:block}
 .row .cell{display:flex;align-items:center;gap:4px;min-width:64px;justify-content:flex-end;position:relative;padding-top:10px}
 .row .cell .cl{position:absolute;top:-4px;left:0;right:0;text-align:center;font-size:9px;color:var(--muted);letter-spacing:.05em}
 .listkey{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:11px;color:var(--muted);margin-bottom:8px}
+.listkey b{color:var(--fg);font-size:12px}
+.hours{display:flex;gap:4px;margin-top:8px;flex-wrap:wrap}
+.hr{flex:1;min-width:38px;padding:5px 0;border-radius:6px;background:var(--panel2);font-size:12px;font-family:var(--num);font-weight:600}
+.hr.on{background:var(--accent);color:var(--accent-fg)}
+.strip{display:flex;gap:2px;margin-top:3px}
+.strip .st{display:flex;flex-direction:column;align-items:center;width:22px;line-height:1}
+.strip .st i{font-style:normal;font-size:8px;color:var(--muted);font-family:var(--num)}
+.strip .st b{font-family:var(--num);font-size:13px}
+.strip .st.cur{background:var(--panel2);border-radius:4px}
 .listkey span{display:inline-flex;align-items:center;gap:4px}
 .listkey i{width:10px;height:10px;border-radius:3px;display:inline-block}
 .row .cell .v{font-family:var(--num);font-weight:700;font-size:20px;line-height:1;font-variant-numeric:tabular-nums}
@@ -394,7 +404,7 @@ function moonSvg(age){var ph=age/29.530588853;var r=20;var cx=22,cy=22;var k=Mat
   return '<svg class="moon" viewBox="0 0 44 44" aria-hidden="true"><circle cx="22" cy="22" r="20" fill="var(--panel2)" stroke="var(--line)"/><path d="'+path+'" fill="#f0c94a"/></svg>';}
 
 /* ---- state ---- */
-var state={view:'spot',spotId:null,dayIdx:0,step:3,favs:[],filter:'all',data:null};
+var state={view:'spot',spotId:null,dayIdx:0,step:3,favs:[],filter:'all',data:null,listDay:-1,listHour:-1};
 function ls(k,v){try{if(v===undefined)return localStorage.getItem(k);localStorage.setItem(k,v);}catch(e){return null;}}
 try{var f=JSON.parse(ls('wk_favs')||'[]');if(Array.isArray(f))state.favs=f;}catch(e){}
 state.spotId=ls('wk_spot')||SPOTS[0].id;if(!SPOTS.some(function(s){return s.id===state.spotId;}))state.spotId=SPOTS[0].id;
@@ -512,20 +522,36 @@ function chart(hours,ni){var W=360,H=130,L=26,R=26,T=18,B=16;var pw=W-L-R,ph=H-T
   return s+'</svg>';}
 
 /* ---- render: list view ---- */
-function renderList(){var root=document.getElementById('viewList');var html='<div class="chips"><button class="chip'+(state.filter==='all'?' on':'')+'" data-f="all">すべて</button><button class="chip'+(state.filter==='fav'?' on':'')+'" data-f="fav">★ お気に入り</button></div>';
-  html+='<div class="listkey"><span><i style="background:var(--accent)"></i>岸の波: 海岸の向きを考慮した波高の目安と波の進む向き</span><span><i style="background:var(--off)"></i>風: 風速と風の吹いていく向き（色はオフ/オン）</span><span>判定: ◎〇△×</span></div>';
-  var any=false;
+function anyHours(){var d=state.data;if(!d)return [];var ids=Object.keys(d.spots);for(var i=0;i<ids.length;i++)if(d.spots[ids[i]].hours.length)return d.spots[ids[i]].hours;return [];}
+function renderList(){var root=document.getElementById('viewList');var base=anyHours();var dl=days(base);
+  var html='<div class="chips"><button class="chip'+(state.filter==='all'?' on':'')+'" data-f="all">すべて</button><button class="chip'+(state.filter==='fav'?' on':'')+'" data-f="fav">★ お気に入り</button></div>';
+  if(!dl.length){root.innerHTML=html+'<div class="card empty">データがありません。⟳ で再取得してください。</div>';return;}
+  /* 日付・時刻の初期値: 今日の直近3時間スロット */
+  var ni=nowIdx(base);if(state.listDay<0||state.listDay>=dl.length)state.listDay=dayIndexOf(dl,ni);
+  if(state.listHour<0){var hh=+base[ni].iso.slice(11,13);state.listHour=Math.floor(hh/3)*3;}
+  var dayKey=dl[state.listDay].key;
+  html+='<div class="card" style="padding:10px 14px"><div class="days">'+dl.map(function(d,i){var L=dayLabel(d.key,i);
+    return '<button class="day'+(i===state.listDay?' sel':'')+'" data-day="'+i+'"><span class="d">'+L.md+'</span><span class="'+L.wcls+'">'+(L.tag||L.w)+'</span></button>';}).join('')+'</div>'+
+    '<div class="hours">'+[0,3,6,9,12,15,18,21].map(function(h){return '<button class="hr'+(h===state.listHour?' on':'')+'" data-hour="'+h+'">'+h+'時</button>';}).join('')+'</div></div>';
+  html+='<div class="listkey"><span><b>'+tLabel(dayKey+'T'+pad(state.listHour)+':00')+'</b> の状況</span><span><i style="background:var(--accent)"></i>岸の波: 海岸の向きを考慮した波高の目安と波の進む向き</span><span><i style="background:var(--off)"></i>風: 風速と風の吹いていく向き（色はオフ/オン）</span><span>下段: 3時間ごとの判定（3時〜21時）</span></div>';
+  var any=false;var iso=dayKey+'T'+pad(state.listHour)+':00';
   AREAS.forEach(function(a){var list=SPOTS.filter(function(s){return s.area===a&&(state.filter==='all'||state.favs.indexOf(s.id)>=0);});if(!list.length)return;any=true;
-    html+='<div class="area-h">'+a+'</div><div class="rows">'+list.map(function(sp){var d=state.data&&state.data.spots[sp.id];var h=d?d.hours[nowIdx(d.hours)]:null;var fav=state.favs.indexOf(sp.id)>=0;
+    html+='<div class="area-h">'+a+'</div><div class="rows">'+list.map(function(sp){var d=state.data&&state.data.spots[sp.id];var hs=d?d.hours:[];
+      var idx=-1;for(var i=0;i<hs.length;i++)if(hs[i].iso===iso){idx=i;break;}
+      var h=idx>=0?hs[idx]:null;
       if(!h)return '<div class="row"><div><span class="nm">'+sp.name+'</span><span class="sb">データなし</span></div></div>';
-      return '<button class="row" data-spot="'+sp.id+'"><div style="min-width:0"><span class="nm">'+sp.name+'</span><span class="sb">'+sizeJp(h.eh)+' · '+REL[h.rel]+' · '+wx(h.wc)+fmt0(h.temp)+'℃'+(sp.cams?' · 📷':'')+'</span></div>'+
+      var strip='';for(var t=3;t<=21;t+=3){var k=dayKey+'T'+pad(t)+':00';var x=null;for(var j=0;j<hs.length;j++)if(hs[j].iso===k){x=hs[j];break;}
+        strip+='<span class="st'+(t===state.listHour?' cur':'')+'"><i>'+t+'</i><b class="c'+(x?x.c:3)+'">'+(x?CM[x.c]:'-')+'</b></span>';}
+      return '<button class="row" data-spot="'+sp.id+'"><div style="min-width:0"><span class="nm">'+sp.name+'</span><span class="sb">'+sizeJp(h.eh)+' · '+REL[h.rel]+' · '+wx(h.wc)+fmt0(h.temp)+'℃'+(sp.cams?' · 📷':'')+'</span><span class="strip">'+strip+'</span></div>'+
         '<div class="cell"><span class="cl">岸の波</span><span style="color:var(--accent)">'+arrow(h.wd)+'</span><span class="v">'+fmt1(h.eh)+'<small>m</small></span></div>'+
         '<div class="cell"><span class="cl">風</span><span class="fx'+h.rel+'">'+arrow(h.wdir)+'</span><span class="v">'+fmt1(h.ws)+'<small>m/s</small></span></div>'+
         '<div class="cell"><span class="cl">判定</span><span class="cmark c'+h.c+'">'+CM[h.c]+'</span></div></button>';}).join('')+'</div>';});
   if(!any)html+='<div class="card empty">お気に入りがありません。ポイント名横の ★ で追加できます。</div>';
   root.innerHTML=html;
   root.querySelectorAll('.chip').forEach(function(b){b.addEventListener('click',function(){state.filter=b.getAttribute('data-f');renderList();});});
-  root.querySelectorAll('.row[data-spot]').forEach(function(b){b.addEventListener('click',function(){state.spotId=b.getAttribute('data-spot');ls('wk_spot',state.spotId);state.dayIdx=0;showView('spot');});});}
+  root.querySelectorAll('.day').forEach(function(b){b.addEventListener('click',function(){state.listDay=+b.getAttribute('data-day');renderList();});});
+  root.querySelectorAll('.hr').forEach(function(b){b.addEventListener('click',function(){state.listHour=+b.getAttribute('data-hour');renderList();});});
+  root.querySelectorAll('.row[data-spot]').forEach(function(b){b.addEventListener('click',function(){state.spotId=b.getAttribute('data-spot');ls('wk_spot',state.spotId);state.dayIdx=state.listDay;showView('spot');});});}
 
 /* ---- picker ---- */
 function openPicker(){var m=document.getElementById('picker');var html='<div class="sheet"><div class="sheet-h"><b>ポイントを選ぶ</b><button class="icon-btn" id="pickClose" aria-label="閉じる">✕</button></div>';
