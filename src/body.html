@@ -35,8 +35,8 @@
   color-scheme:dark;
 }
 *{box-sizing:border-box}
-html,body{height:100%}
-body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--font);font-size:14px;line-height:1.5;
+html{overflow-y:auto;-webkit-overflow-scrolling:touch}
+body{min-height:100vh;margin:0;background:var(--bg);color:var(--fg);font-family:var(--font);font-size:14px;line-height:1.5;
   padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
   padding-block:0 calc(76px + env(safe-area-inset-bottom,0px));-webkit-text-size-adjust:100%}
 body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--panel)}
@@ -175,8 +175,8 @@ table.mx{border-collapse:separate;border-spacing:0;font-variant-numeric:tabular-
 .nav button.on{color:var(--accent);font-weight:700}
 
 /* picker */
-.modal{position:fixed;inset:0;z-index:20;background:rgba(5,20,30,.5);display:flex;align-items:flex-end}
-.sheet{background:var(--panel);width:100%;max-height:85%;border-radius:16px 16px 0 0;overflow:auto;padding:12px max(16px,env(safe-area-inset-right,0px)) calc(16px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}
+.modal{position:fixed;inset:0;z-index:20;background:rgba(5,20,30,.5);display:flex;align-items:flex-end;overscroll-behavior:contain}
+.sheet{background:var(--panel);width:100%;max-height:85%;border-radius:16px 16px 0 0;overflow:auto;-webkit-overflow-scrolling:touch;padding:12px max(16px,env(safe-area-inset-right,0px)) calc(16px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}
 .sheet-h{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
 .sheet-h b{font-size:16px}
 .sheet .area-h{margin-top:10px}
@@ -197,7 +197,7 @@ table.mx{border-collapse:separate;border-spacing:0;font-variant-numeric:tabular-
 :root{--land:#e6e1d3;--coast:#8d8572;--sea:#cfd9e2}
 @media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){--land:#3a3f3a;--coast:#6c7366;--sea:#22303a} }
 :root[data-theme="dark"]{--land:#3a3f3a;--coast:#6c7366;--sea:#22303a}
-.mapwrap{position:relative;border-radius:10px;overflow:hidden;background:var(--sea);touch-action:manipulation}
+.mapwrap{position:relative;border-radius:10px;overflow:hidden;background:var(--sea);touch-action:pan-y pinch-zoom}
 .mapwrap canvas{display:block;width:100%;height:auto}
 .mapwrap .ov{position:absolute;left:8px;top:8px;background:rgba(20,30,40,.75);color:#fff;font-size:12px;padding:3px 8px;border-radius:6px;pointer-events:none;font-weight:700}
 .mapwrap .ov .num{font-size:14px}
@@ -612,11 +612,15 @@ function fetchRegion(r){var n=gridN(r),lats=[],lons=[];for(var i=0;i<n[0];i++)fo
 function loadRegionCache(id){try{var j=JSON.parse(ls('wk_map_'+id)||'null');if(j&&j.t&&j.wh){j.source='cache';return j;}}catch(e){}return null;}
 function ensureRegion(force){var r=region();var d=mapState.data[r.id]||loadRegionCache(r.id);
   if(d)mapState.data[r.id]=d;
-  var fresh=d&&d.source==='live'&&(Date.now()-new Date(d.fetchedAt).getTime()<60*60000);
+  var fresh=d&&(d.source==='live'||d.source==='cache')&&(Date.now()-new Date(d.fetchedAt).getTime()<3*60*60000);
   if(fresh&&!force)return Promise.resolve(d);
+  if(state.fetching){clearTimeout(mapState.wait);mapState.wait=setTimeout(function(){if(mapState.regionId===r.id)ensureRegion(force);},1500);return Promise.resolve(d);}
+  if(mapState.busy)return Promise.resolve(d);
   mapState.busy=true;var b=document.getElementById('mapBusy');if(b){b.hidden=false;b.textContent=d?'最新データを取得中…':'取得中…';}
   return fetchRegion(r).then(function(p){mapState.data[r.id]=p;mapState.busy=false;mapState.err='';if(mapState.regionId===r.id)renderMap();return p;})
-    .catch(function(e){mapState.busy=false;mapState.err=(e&&/429/.test(String(e.message)))?'rate':'net';if(mapState.regionId===r.id)renderMap();return d;});}
+    .catch(function(e){mapState.busy=false;mapState.err=(e&&/429/.test(String(e.message)))?'rate':'net';
+      if(mapState.err==='rate'&&!mapState.retried){mapState.retried=true;setTimeout(function(){mapState.retried=false;if(state.view==='map')ensureRegion(true);},65000);}
+      if(mapState.regionId===r.id)renderMap();return d;});}
 function mapNowIdx(d){if(!d||!d.t.length)return 0;var n=isoOf(jstNow());for(var i=0;i<d.t.length;i++)if(d.t[i]>=n)return i;return d.t.length-1;}
 function tLabel(iso){var p=iso.slice(0,10).split('-');var w=new Date(+p[0],+p[1]-1,+p[2]).getDay();return (+p[1])+'/'+(+p[2])+'('+WD[w]+') '+(+iso.slice(11,13))+'時';}
 
@@ -628,11 +632,11 @@ function renderMap(){var r=region(),d=mapState.data[r.id];
   document.getElementById('clabels').innerHTML=sc.stops.map(function(s){return '<span>'+s[0]+'</span>';}).join('')+'<span style="flex:0;text-align:right">'+sc.unit+'</span>';
   var sl=document.getElementById('tSlider'),busy=document.getElementById('mapBusy');busy.hidden=!mapState.busy;
   var note=document.getElementById('mapNote');
-  var errTxt=mapState.err==='rate'?'データ提供元のアクセス制限にかかりました。1分ほど待ってから ⟳ で再取得してください。':mapState.err==='net'?'この地域のデータを取得できませんでした。通信環境を確認して ⟳ で再取得してください。':'';
+  var errTxt=mapState.err==='rate'?'データ提供元の1分あたりの取得上限に達しました。約1分後に自動で再取得します。':mapState.err==='net'?'この地域のデータを取得できませんでした。通信環境を確認して ⟳ で再取得してください。':'';
   if(!d){document.getElementById('tLabel').textContent='--';document.getElementById('mapOv').textContent=r.name;note.textContent=mapState.busy?'':errTxt;drawMap(r,null);return;}
   if(mapState.t<0||mapState.t>=d.t.length)mapState.t=mapNowIdx(d);
   sl.max=d.t.length-1;sl.value=mapState.t;document.getElementById('tLabel').textContent=tLabel(d.t[mapState.t]);
-  document.getElementById('mapOv').innerHTML=r.name+' '+sc.name+' <span class="num">'+tLabel(d.t[mapState.t])+'</span>';
+  document.getElementById('mapOv').innerHTML=r.name+' '+sc.name+' <span class="num">'+tLabel(d.t[mapState.t])+'</span><span style="font-weight:500;opacity:.8"> · 取得 '+fmtAt(d.fetchedAt)+'</span>';
   note.textContent=(d.source==='snapshot'?'サンプルデータ（'+fmtAt(d.fetchedAt)+' 取得）。':d.source==='cache'?'前回取得 '+fmtAt(d.fetchedAt)+' のデータ。':'更新 '+fmtAt(d.fetchedAt)+'。')+(mapState.busy?'':errTxt)+' 矢印は波・風の進む向き。陸地に近い格子は沖合の値です。';
   drawMap(r,d);readout(r,d);}
 
@@ -695,9 +699,9 @@ document.getElementById('navMap').addEventListener('click',function(){showView('
 document.getElementById('favBtn').addEventListener('click',function(){var i=state.favs.indexOf(state.spotId);if(i>=0)state.favs.splice(i,1);else state.favs.push(state.spotId);ls('wk_favs',JSON.stringify(state.favs));render();});
 document.getElementById('refreshBtn').addEventListener('click',function(){update(true);if(state.view==='map')ensureRegion(true);});
 
-function update(manual){setStatus('','最新データを取得中…');
-  return fetchLive().then(function(d){state.data=d;setStatus('','更新 '+fmtAt(d.fetchedAt)+' · Open-Meteo');render();})
-    .catch(function(err){var d=state.data;
+function update(manual){setStatus('','最新データを取得中…');state.fetching=true;
+  return fetchLive().then(function(d){state.fetching=false;state.data=d;setStatus('','更新 '+fmtAt(d.fetchedAt)+' · Open-Meteo');render();})
+    .catch(function(err){state.fetching=false;var d=state.data;
       if(d&&d.source==='cache')setStatus('err','通信できません。前回取得 '+fmtAt(d.fetchedAt)+' のデータを表示');
       else if(d&&d.source==='snapshot')setStatus('sample','サンプルデータ（'+fmtAt(d.fetchedAt)+' 取得）を表示中。ネット接続後に更新してください');
       else if(d)setStatus('err','通信できません。'+fmtAt(d.fetchedAt)+' のデータを表示');
@@ -706,9 +710,10 @@ function update(manual){setStatus('','最新データを取得中…');
 
 /* boot: show cached or embedded data at once, then refresh */
 state.data=loadCache()||loadSnapshot();
+var cacheFresh=state.data&&state.data.source==='cache'&&(Date.now()-new Date(state.data.fetchedAt).getTime()<45*60000);
 if(state.data){var sel=state.data;var dl0=days(hoursOf());state.dayIdx=dayIndexOf(dl0,nowIdx(hoursOf()));render();}
 else document.getElementById('viewSpot').innerHTML='<div class="card empty">読み込み中…</div>';
 if(location.hash==='#map')showView('map');else if(location.hash==='#list')showView('list');
-update(false);
+if(cacheFresh)setStatus('','更新 '+fmtAt(state.data.fetchedAt)+' · Open-Meteo（キャッシュ）');else update(false);
 })();
 </script>
